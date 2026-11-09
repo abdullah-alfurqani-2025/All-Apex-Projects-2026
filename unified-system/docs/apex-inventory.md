@@ -115,6 +115,14 @@
 - جداول النواة: SETTINGS، MODULES، LEVELS، UNITS (شجري)، TITLES، COUNTRIES، GOVERNORATES، WILAYATS، EMPLOYEES (البيانات الأساسية فقط)، ROLES (عامة أو خاصة بوحدة، مع ROLE_RANK)، USERS، USER_CREDENTIALS، USER_MODULES (دور ونطاق بيانات ALL/UNIT/OWN لكل وحدة)، LOGIN_HISTORY، AUDIT_LOG (JSON)، ATTACHMENTS (عامة).
 - الحزم: MOINFO_UTIL (الإعدادات، سجل التدقيق، مولّد Trigger واحد لكل جدول)، MOINFO_AUTH (SHA-256 مع Salt و1000 تكرار، وقفل الحساب بعد محاولات فاشلة)، MOINFO_SEC (HAS_MODULE وHAS_ROLE وCAN_SEE_UNIT).
 
+## السكربتان 02 و03 (9 نوفمبر 2026)
+
+- 02: جدولا `MOINFO_LOOKUP_TYPES` و`MOINFO_LOOKUPS` للقوائم البسيطة، والإعداد `AUDIT_EXCLUDE_TABLES`، وحزمة `MOINFO_ADMIN` (CREATE_USER، GRANT_MODULE، REVOKE_MODULE، RESET_PASSWORD، UNLOCK_USER).
+- 03 (HR): `MOINFO_HR_EMPLOYEE_DETAILS` للبيانات الشخصية والحساسة، و`MOINFO_HR_DIRECTORY` لدليل الهواتف، و`MOINFO_HR_ATTENDANCE_LOG` لسجل بصمة ZK.
+- Views الوحدة: V_EMPLOYEES، V_EMPLOYEE_DETAILS، V_DIRECTORY، V_INCOMPLETE، V_EXPIRING_DOCS، V_ATTENDANCE.
+- حزمة `MOINFO_HR`: MY_EMPLOYEE_ID، وCAN_VIEW_DETAILS التي تسمح للموظف ببياناته، ولمن له دور MANAGER فأعلى ضمن نطاقه.
+- نقاط تنتظر تأكيد عبدالله: معنى LEAVES وLEAVES2 (حُفظا مؤقتًا باسم LEAVE_BALANCE_1/2)، وطريقة ربط رقم البصمة PIN بالموظف.
+
 ## التوجه المبدئي
 
 نواة ServiceDesk (`MOINFO_USERS/UNITS/LEVELS/ROLES/TITLES/PRIVILEGES` + مولّد التدقيق) هي الأنضج بين الأنظمة، وتصلح أساسًا للمنصة الموحدة. تُضاف إليها بقية الأنظمة كوحدات ببادئات، بعد توحيد البيانات المشتركة (المستخدمون، الهيكل التنظيمي، الموظفون، الماركات/الموديلات/الموردون، الفعاليات).
