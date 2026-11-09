@@ -652,9 +652,12 @@ CREATE OR REPLACE PACKAGE BODY MOINFO_AUTH AS
         p_reason   IN VARCHAR2
     ) IS
         PRAGMA AUTONOMOUS_TRANSACTION;
+        -- الدوال الخاصة بالحزمة لا تُستدعى داخل SQL، فتُقرأ قيمها في متغيرات أولًا
+        l_ip      VARCHAR2(60) := client_ip;
+        l_session NUMBER       := apex_session;
     BEGIN
         INSERT INTO MOINFO_LOGIN_HISTORY (USERNAME, USER_ID, LOGIN_AT, IS_SUCCESS, FAILURE_REASON, IP_ADDRESS, APEX_SESSION_ID)
-        VALUES (SUBSTR(UPPER(TRIM(p_username)), 1, 100), p_user_id, SYSTIMESTAMP, p_success, p_reason, client_ip, apex_session);
+        VALUES (SUBSTR(UPPER(TRIM(p_username)), 1, 100), p_user_id, SYSTIMESTAMP, p_success, p_reason, l_ip, l_session);
         COMMIT;
     END log_login;
 
@@ -807,10 +810,11 @@ CREATE OR REPLACE PACKAGE BODY MOINFO_AUTH AS
 
     PROCEDURE POST_LOGOUT IS
         PRAGMA AUTONOMOUS_TRANSACTION;
+        l_session NUMBER := apex_session;
     BEGIN
         UPDATE MOINFO_LOGIN_HISTORY
            SET LOGOUT_AT = SYSTIMESTAMP
-         WHERE APEX_SESSION_ID = apex_session
+         WHERE APEX_SESSION_ID = l_session
            AND IS_SUCCESS = 'Y'
            AND LOGOUT_AT IS NULL;
         COMMIT;
@@ -900,11 +904,12 @@ CREATE OR REPLACE PACKAGE BODY MOINFO_SEC AS
     END app_user;
 
     FUNCTION CURRENT_USER_ID RETURN NUMBER IS
-        l_id MOINFO_USERS.USER_ID%TYPE;
+        l_id   MOINFO_USERS.USER_ID%TYPE;
+        l_user VARCHAR2(255) := app_user;
     BEGIN
         SELECT USER_ID INTO l_id
           FROM MOINFO_USERS
-         WHERE USERNAME = app_user
+         WHERE USERNAME = l_user
            AND IS_ACTIVE = 'Y';
         RETURN l_id;
     EXCEPTION
@@ -913,11 +918,12 @@ CREATE OR REPLACE PACKAGE BODY MOINFO_SEC AS
     END CURRENT_USER_ID;
 
     FUNCTION IS_ADMIN RETURN BOOLEAN IS
-        l_n NUMBER;
+        l_n    NUMBER;
+        l_user VARCHAR2(255) := app_user;
     BEGIN
         SELECT COUNT(*) INTO l_n
           FROM MOINFO_USERS
-         WHERE USERNAME = app_user
+         WHERE USERNAME = l_user
            AND IS_ACTIVE = 'Y'
            AND IS_SYS_ADMIN = 'Y';
         RETURN l_n > 0;
@@ -925,6 +931,7 @@ CREATE OR REPLACE PACKAGE BODY MOINFO_SEC AS
 
     FUNCTION ROLE_RANK (p_module IN VARCHAR2) RETURN NUMBER IS
         l_rank NUMBER;
+        l_user VARCHAR2(255) := app_user;
     BEGIN
         IF IS_ADMIN THEN
             RETURN c_admin_rank;
@@ -936,7 +943,7 @@ CREATE OR REPLACE PACKAGE BODY MOINFO_SEC AS
           JOIN MOINFO_USER_MODULES um ON um.USER_ID = u.USER_ID
           JOIN MOINFO_MODULES m       ON m.MODULE_CODE = um.MODULE_CODE
           JOIN MOINFO_ROLES r         ON r.ROLE_ID = um.ROLE_ID
-         WHERE u.USERNAME = app_user
+         WHERE u.USERNAME = l_user
            AND u.IS_ACTIVE = 'Y'
            AND um.MODULE_CODE = UPPER(p_module)
            AND um.IS_ACTIVE = 'Y'
@@ -971,6 +978,7 @@ CREATE OR REPLACE PACKAGE BODY MOINFO_SEC AS
 
     FUNCTION DATA_SCOPE (p_module IN VARCHAR2) RETURN VARCHAR2 IS
         l_scope MOINFO_USER_MODULES.DATA_SCOPE%TYPE;
+        l_user  VARCHAR2(255) := app_user;
     BEGIN
         IF IS_ADMIN THEN
             RETURN 'ALL';
@@ -980,7 +988,7 @@ CREATE OR REPLACE PACKAGE BODY MOINFO_SEC AS
           INTO l_scope
           FROM MOINFO_USERS u
           JOIN MOINFO_USER_MODULES um ON um.USER_ID = u.USER_ID
-         WHERE u.USERNAME = app_user
+         WHERE u.USERNAME = l_user
            AND u.IS_ACTIVE = 'Y'
            AND um.MODULE_CODE = UPPER(p_module)
            AND um.IS_ACTIVE = 'Y';
@@ -992,6 +1000,7 @@ CREATE OR REPLACE PACKAGE BODY MOINFO_SEC AS
 
     FUNCTION CAN_SEE_UNIT (p_module IN VARCHAR2, p_unit_id IN NUMBER) RETURN VARCHAR2 IS
         l_scope MOINFO_USER_MODULES.DATA_SCOPE%TYPE;
+        l_user  VARCHAR2(255) := app_user;
         l_root  NUMBER;
         l_n     NUMBER;
     BEGIN
@@ -1004,7 +1013,7 @@ CREATE OR REPLACE PACKAGE BODY MOINFO_SEC AS
           FROM MOINFO_USERS u
           JOIN MOINFO_USER_MODULES um ON um.USER_ID = u.USER_ID
           LEFT JOIN MOINFO_EMPLOYEES e ON e.EMPLOYEE_ID = u.EMPLOYEE_ID
-         WHERE u.USERNAME = app_user
+         WHERE u.USERNAME = l_user
            AND u.IS_ACTIVE = 'Y'
            AND um.MODULE_CODE = UPPER(p_module)
            AND um.IS_ACTIVE = 'Y';
@@ -1088,9 +1097,14 @@ COMMIT;
 DECLARE
     l_user_id NUMBER;
 BEGIN
-    INSERT INTO MOINFO_USERS (USERNAME, DISPLAY_NAME, IS_SYS_ADMIN, HOME_MODULE)
-    VALUES ('ADMIN', 'مدير النظام', 'Y', 'CORE')
-    RETURNING USER_ID INTO l_user_id;
+    BEGIN
+        SELECT USER_ID INTO l_user_id FROM MOINFO_USERS WHERE USERNAME = 'ADMIN';
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            INSERT INTO MOINFO_USERS (USERNAME, DISPLAY_NAME, IS_SYS_ADMIN, HOME_MODULE)
+            VALUES ('ADMIN', 'مدير النظام', 'Y', 'CORE')
+            RETURNING USER_ID INTO l_user_id;
+    END;
 
     MOINFO_AUTH.SET_PASSWORD(l_user_id, 'Admin#2026', 'Y');
     COMMIT;

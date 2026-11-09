@@ -8,6 +8,7 @@
 |---|---|
 | `sql/00_moinfo_core_drop.sql` | حذف كائنات النواة لإعادة التثبيت. يتوقف تلقائيًا إن لم يكن الـ Schema هو Schema النظام الموحد |
 | `sql/01_moinfo_core.sql` | النواة المشتركة: الجداول، وحزم MOINFO_UTIL وMOINFO_AUTH وMOINFO_SEC، والبيانات الأولية |
+| `sql/01a_fix_packages.sql` | إصلاح لمن شغّل النسخة الأولى من 01: يعيد إنشاء MOINFO_AUTH وMOINFO_SEC وينشئ ADMIN |
 | `docs/apex-inventory.md` | جرد الأنظمة القديمة، ونتائج المقارنة، والقرارات المعتمدة |
 
 ## التثبيت
