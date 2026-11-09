@@ -121,7 +121,15 @@
 - 03 (HR): `MOINFO_HR_EMPLOYEE_DETAILS` للبيانات الشخصية والحساسة، و`MOINFO_HR_DIRECTORY` لدليل الهواتف، و`MOINFO_HR_ATTENDANCE_LOG` لسجل بصمة ZK.
 - Views الوحدة: V_EMPLOYEES، V_EMPLOYEE_DETAILS، V_DIRECTORY، V_INCOMPLETE، V_EXPIRING_DOCS، V_ATTENDANCE.
 - حزمة `MOINFO_HR`: MY_EMPLOYEE_ID، وCAN_VIEW_DETAILS التي تسمح للموظف ببياناته، ولمن له دور MANAGER فأعلى ضمن نطاقه.
-- نقاط تنتظر تأكيد عبدالله: معنى LEAVES وLEAVES2 (حُفظا مؤقتًا باسم LEAVE_BALANCE_1/2)، وطريقة ربط رقم البصمة PIN بالموظف.
+- LEAVES وLEAVES2 حُفظا باسم LEAVE_BALANCE_1/2، وقرار عبدالله: تبقى كما هي حاليًا.
+- رقم البصمة PIN في أجهزة ZK هو الرقم الوظيفي EMPLOYEE_NO، فسجل البصمة يُربط بالموظف عبره (السكربت 03a يصلح النسخة الأولى).
+
+## السكربت 04: مشاركات الموظفين (EVT)
+
+- جدول `MOINFO_EVT_EVENTS` يدمج PRT_EVENT_EVENTDETAILS وENGTR_EVENTS، وأنواع المشاركة في القوائم المرجعية (EVT_TYPE).
+- أدوار رئيس القسم والدائرة والقطاع تحل محلها صلاحية MANAGER بنطاق UNIT. لجنة التدريب الهندسي نطاقها وحدة القطاع الهندسي.
+- حزمة `MOINFO_EVT`: CAN_SEE، وHAS_OVERLAP، وOVERLAP_MESSAGE لـ Validation التداخل.
+- Views: V_EVENTS، وV_OVERLAPS، وV_EMPLOYEE_SUMMARY.
 
 ## التوجه المبدئي
 
