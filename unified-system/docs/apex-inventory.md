@@ -131,6 +131,14 @@
 - حزمة `MOINFO_EVT`: CAN_SEE، وHAS_OVERLAP، وOVERLAP_MESSAGE لـ Validation التداخل.
 - Views: V_EVENTS، وV_OVERLAPS، وV_EMPLOYEE_SUMMARY.
 
+## السكربت 05: التغطيات الإعلامية (MED)
+
+- `MOINFO_MED_COVERAGES` بديل PRT_RSQ_REG_EVENTS، و`MOINFO_MED_CHANNELS` و`MOINFO_MED_PROGRAMS` (قيد مركب يضمن أن البرنامج يتبع قناة التغطية).
+- أعمدة PHOTOGRAPHER وMONTAGE وREPORTER كانت أسماء مستخدمين مفصولة بـ ":"، فصارت جدول `MOINFO_MED_CREW` (سطر لكل موظف ودوره). افتراض: الأعمدة الثلاثة كلها قوائم موظفين.
+- المناسبات وأنواع التغطية في القوائم المرجعية (MED_EVENT، MED_EVENT_TYPE)، والمنطقة والمدينة صارتا المحافظة والولاية في النواة.
+- حزمة `MOINFO_MED`: SET_CREW وGET_CREW_IDS وGET_CREW_NAMES. وViews: V_COVERAGES، وV_STATS، وV_CREW_WORKLOAD.
+- الولايات غير معبأة في النواة (المحافظات فقط).
+
 ## التوجه المبدئي
 
 نواة ServiceDesk (`MOINFO_USERS/UNITS/LEVELS/ROLES/TITLES/PRIVILEGES` + مولّد التدقيق) هي الأنضج بين الأنظمة، وتصلح أساسًا للمنصة الموحدة. تُضاف إليها بقية الأنظمة كوحدات ببادئات، بعد توحيد البيانات المشتركة (المستخدمون، الهيكل التنظيمي، الموظفون، الماركات/الموديلات/الموردون، الفعاليات).
