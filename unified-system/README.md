@@ -16,6 +16,7 @@
 | `sql/05_moinfo_med.sql` | وحدة التغطيات الإعلامية: بديل Al-Rustaq Events (f1100) |
 | `sql/06_moinfo_tsk.sql` | وحدة المهام: تدمج Core Tasks (f200) ومهام ServiceDesk |
 | `sql/07_moinfo_att.sql` | حزمة MOINFO_FILES لرفع الملفات وتنزيلها (للنواة)، ووحدة المرفقات والقوالب بديل Attachments (f300) |
+| `apex/f145032_empty_base.sql` | تصدير التطبيق الفارغ Unified-System (145032)، وهو الأساس الذي ستُبنى عليه الصفحات |
 | `docs/apex-inventory.md` | جرد الأنظمة القديمة، ونتائج المقارنة، والقرارات المعتمدة |
 
 ## التثبيت
