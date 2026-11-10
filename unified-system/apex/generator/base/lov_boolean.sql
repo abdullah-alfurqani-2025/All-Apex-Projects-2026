@@ -1,0 +1,30 @@
+prompt --application/shared_components/user_interface/lovs/boolean
+begin
+wwv_flow_imp_shared.create_list_of_values(
+ p_id=>wwv_flow_imp.id(12411314072716594117)
+,p_lov_name=>'BOOLEAN'
+,p_static_id=>'boolean'
+,p_lov_query=>'.'||wwv_flow_imp.id(12411314072716594117)||'.'
+,p_location=>'STATIC'
+,p_version_scn=>'SH256:CnCBOq-zabcz-aPWKwU8C5KDeZy6YuyjvpJoTrTywfI'
+,p_created_on=>wwv_flow_imp.dz('20261109184303Z')
+,p_updated_on=>wwv_flow_imp.dz('20261109184303Z')
+,p_created_by=>'ABDULLAH.ALFURQANI.2025@GMAIL.COM'
+,p_updated_by=>'ABDULLAH.ALFURQANI.2025@GMAIL.COM'
+);
+wwv_flow_imp_shared.create_static_lov_data(
+ p_id=>wwv_flow_imp.id(12411314784905594119)
+,p_lov_disp_sequence=>2
+,p_lov_disp_value=>'No'
+,p_lov_return_value=>'FALSE'
+,p_static_id=>'false'
+);
+wwv_flow_imp_shared.create_static_lov_data(
+ p_id=>wwv_flow_imp.id(12411314357637594118)
+,p_lov_disp_sequence=>1
+,p_lov_disp_value=>'Yes'
+,p_lov_return_value=>'TRUE'
+,p_static_id=>'true'
+);
+end;
+/
