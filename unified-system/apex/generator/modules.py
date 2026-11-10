@@ -8,7 +8,7 @@ DML = 'CREATE,SAVE,DELETE'
 # ------------------------------------------------------------------------------
 def authorizations():
     calls = []
-    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD', 'PRC', 'STD']:
+    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD', 'PRC', 'STD', 'ADV']:
         calls.append(authorization(f'{code}_MANAGER', f"return MOINFO_SEC.HAS_ROLE('{code}', 'MANAGER');",
                                    'هذه الصفحة للمشرفين في الوحدة'))
     calls.append(authorization('CAT_MANAGER', """return MOINFO_SEC.IS_ADMIN
@@ -34,7 +34,8 @@ def lovs():
     for t in ['HR_MARITAL_STATUS', 'HR_RELIGION', 'HR_APPOINTMENT_TYPE', 'HR_QUALIFICATION', 'HR_BANK',
               'HR_EMP_STATUS', 'EVT_TYPE', 'MED_EVENT', 'MED_EVENT_TYPE', 'TSK_STATUS', 'TSK_TYPE',
               'TSK_CATEGORY', 'ATT_CATEGORY', 'HD_DEVICE_STATUS', 'HD_REQUEST_STATUS', 'PRC_REQUEST_STATUS',
-              'STD_ITEM_STATUS', 'STD_LOCATION', 'STD_BIN']:
+              'STD_ITEM_STATUS', 'STD_LOCATION', 'STD_BIN',
+              'ADV_SECTOR', 'ADV_INDUSTRY', 'ADV_MEDIA', 'ADV_DEAL_STATUS', 'ADV_ACTIVITY_TYPE']:
         out.append(lookup_lov(t))
     out.append(lov('COUNTRIES', "select NAME_AR d, COUNTRY_ID r from MOINFO_COUNTRIES where IS_ACTIVE = 'Y' order by SORT_ORDER, NAME_AR"))
     out.append(lov('WILAYATS', """select g.NAME_AR || ' - ' || w.NAME_AR d, w.WILAYAT_ID r
@@ -71,6 +72,19 @@ def lovs():
                                                 ('تسوية بعد الجرد', 'ADJUST')]))
     out.append(static_lov('STD_LIST_TYPES', [('حالة المعدة', 'STD_ITEM_STATUS'), ('موقع التخزين', 'STD_LOCATION'),
                                              ('الرف أو الخانة', 'STD_BIN')]))
+    out.append(lov('ADV_AGENCIES', "select NAME d, ACCOUNT_ID r from MOINFO_ADV_ACCOUNTS where ACCOUNT_TYPE = 'AGENCY' and IS_ACTIVE = 'Y' order by NAME"))
+    out.append(lov('ADV_COMPANIES', """select NAME || nvl2(AGENCY_NAME, ' (' || AGENCY_NAME || ')', '') d, ACCOUNT_ID r
+  from MOINFO_ADV_V_ACCOUNTS where ACCOUNT_TYPE = 'COMPANY' and IS_ACTIVE = 'Y' order by NAME"""))
+    out.append(lov('ADV_DEAL_CONTACTS', """select c.NAME || nvl2(c.JOB_TITLE, ' - ' || c.JOB_TITLE, '') || ' (' || a.NAME || ')' d, c.CONTACT_ID r
+  from MOINFO_ADV_CONTACTS c
+  join MOINFO_ADV_ACCOUNTS a on a.ACCOUNT_ID = c.ACCOUNT_ID
+ where c.IS_ACTIVE = 'Y'
+   and c.ACCOUNT_ID in (:P9005_ADVERTISER_ID, :P9005_AGENCY_ID)
+ order by c.IS_PRIMARY desc, c.NAME"""))
+    out.append(static_lov('ADV_ACCOUNT_TYPE', [('شركة معلنة', 'COMPANY'), ('وكالة إعلانية', 'AGENCY')]))
+    out.append(static_lov('ADV_LIST_TYPES', [('القطاع', 'ADV_SECTOR'), ('النشاط التجاري', 'ADV_INDUSTRY'),
+                                             ('الوسيلة الإعلامية', 'ADV_MEDIA'), ('حالة الفرصة', 'ADV_DEAL_STATUS'),
+                                             ('نوع المتابعة', 'ADV_ACTIVITY_TYPE')]))
     out.append(static_lov('PRC_ITEM_DECISION', [('معتمد', 'Y'), ('مرفوض', 'N')]))
     out.append(static_lov('MED_CREW_ROLE', [('مصور', 'PHOTOGRAPHER'), ('مونتاج', 'EDITOR'), ('مراسل', 'REPORTER')]))
     out.append(static_lov('TSK_PRIORITY', [('منخفضة', 'LOW'), ('عادية', 'NORMAL'), ('عالية', 'HIGH'), ('عاجلة', 'URGENT')]))
@@ -124,6 +138,13 @@ MODULE_MENU = [
         ('النواقص', 8006, '8006', 'MOD_STD'),
         ('قوائم المخزن', 8007, '8007,8008', 'STD_MANAGER'),
     ]),
+    ('ADV', 'القسم التجاري', 'fa-bullhorn', [
+        ('الفرص الإعلانية', 9004, '9004,9005', 'MOD_ADV'),
+        ('المتابعات المستحقة', 9006, '9006', 'MOD_ADV'),
+        ('الشركات والوكالات', 9001, '9001,9002,9003', 'MOD_ADV'),
+        ('الإحصائيات', 9007, '9007', 'MOD_ADV'),
+        ('قوائم القسم التجاري', 9008, '9008,9009', 'ADV_MANAGER'),
+    ]),
     ('CAT', 'الكتالوج المشترك', 'fa-tags', [
         ('أنواع المنتجات', 100, '100,101', 'CAT_MANAGER'),
         ('الماركات', 102, '102,103', 'CAT_MANAGER'),
@@ -156,6 +177,7 @@ def home_cards():
         'HD': 'طلبات الدعم والأجهزة والتسليم والضمان',
         'PRC': 'طلبات الشراء والاعتماد والشراء والاستلام',
         'STD': 'المعدات وصرفها واستلامها والجرد',
+        'ADV': 'المعلنون والوكالات والفرص الإعلانية ومتابعتها',
         'CAT': 'الماركات والموديلات والموردون وأنواع الضمان',
     }
     out = [dict(text='بياناتي', page=1010, icon='fa-user-circle', authz='HAS_EMPLOYEE', desc='بياناتك الوظيفية والشخصية',
@@ -1572,6 +1594,249 @@ end loop;""", point='BEFORE_HEADER', seq=10, cond=('ITEM_IS_NOT_NULL', 'P8003_CO
         'STD_MANAGER')
     return pages
 
+# ------------------------------------------------------------------------------
+# ADV (9000)
+# ------------------------------------------------------------------------------
+ADV_DEAL_COLS = [('DEAL_ID', None, 'NUMBER'), ('TITLE', 'الفرصة', 'STRING'), ('ADVERTISER_NAME', 'المعلن', 'STRING'),
+                 ('AGENCY_NAME', 'الوكالة', 'STRING'), ('MEDIA_AR', 'الوسيلة', 'STRING'), ('STATUS_AR', 'الحالة', 'STRING'),
+                 ('OWNER_AR', 'المندوب', 'STRING'), ('DEAL_DATE', 'التاريخ', 'DATE'),
+                 ('EXPECTED_AMOUNT', 'القيمة المتوقعة', 'NUMBER'), ('NEXT_FOLLOWUP_DATE', 'المتابعة القادمة', 'DATE'),
+                 ('FOLLOWUP_STATE_AR', 'تنبيه', 'STRING'), ('ACTIVITIES_COUNT', 'المتابعات', 'NUMBER')]
+ADV_DEAL_SEL = """select DEAL_ID, TITLE, ADVERTISER_NAME, AGENCY_NAME, MEDIA_AR, STATUS_AR, OWNER_AR, DEAL_DATE, EXPECTED_AMOUNT,
+       NEXT_FOLLOWUP_DATE, FOLLOWUP_STATE_AR, ACTIVITIES_COUNT
+  from MOINFO_ADV_V_DEALS"""
+
+def adv_pages():
+    pages = []
+    can_add = "MOINFO_SEC.HAS_ROLE('ADV', 'USER')"
+    mgr_cond = "MOINFO_ADV.IS_MANAGER = 'Y'"
+
+    # 9001 accounts
+    p = Page(9001, 'الحسابات', authz='MOD_ADV', alias='ADV-ACCOUNTS')
+    reg = p.ir_region('الشركات والوكالات', """select ACCOUNT_ID, ACCOUNT_TYPE_AR, NAME, AGENCY_NAME, SECTOR_AR, INDUSTRY_AR, PHONE, EMAIL,
+       PRIMARY_CONTACT, CONTACTS_COUNT, CLIENTS_COUNT
+  from MOINFO_ADV_V_ACCOUNTS
+ where IS_ACTIVE = 'Y'
+ order by NAME""",
+        [('ACCOUNT_ID', None, 'NUMBER'), ('ACCOUNT_TYPE_AR', 'النوع', 'STRING'), ('NAME', 'الاسم', 'STRING'),
+         ('AGENCY_NAME', 'الوكالة الممثلة', 'STRING'), ('SECTOR_AR', 'القطاع', 'STRING'),
+         ('INDUSTRY_AR', 'النشاط', 'STRING'), ('PHONE', 'الهاتف', 'STRING'), ('EMAIL', 'البريد', 'STRING'),
+         ('PRIMARY_CONTACT', 'جهة الاتصال', 'STRING'), ('CONTACTS_COUNT', 'جهات الاتصال', 'NUMBER'),
+         ('CLIENTS_COUNT', 'عملاء الوكالة', 'NUMBER')],
+        pk='ACCOUNT_ID', link_page=9002, link_item='P9002_ACCOUNT_ID')
+    p.button(reg, 'CREATE', 'حساب جديد', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:9002:&SESSION.::&DEBUG.:9002::', icon='fa-plus',
+             cond_type='EXPRESSION', cond_item=can_add, cond_lang='PLSQL')
+    pages.append(p)
+
+    # 9002 account
+    p = Page(9002, 'حساب', authz='MOD_ADV', alias='ADV-ACCOUNT')
+    r = p.form_region('حساب', 'MOINFO_ADV_ACCOUNTS')
+    p.item(r, 'P9002_ACCOUNT_ID', display='HIDDEN', source='ACCOUNT_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
+    p.item(r, 'P9002_ACCOUNT_TYPE', label='النوع', display='SELECT', source='ACCOUNT_TYPE', source_region=r,
+           lov='ADV_ACCOUNT_TYPE', required=True, default='COMPANY', seq=10)
+    p.item(r, 'P9002_NAME', label='الاسم', source='NAME', source_region=r, required=True, maxlen=500, seq=20, new_line=False)
+    p.item(r, 'P9002_AGENCY_ID', label='الوكالة الممثلة', display='SELECT', source='AGENCY_ID', source_region=r,
+           dtype='NUMBER', lov='ADV_AGENCIES', null_text='- مباشر بلا وكالة -', seq=30,
+           help='للشركة المعلنة فقط: الوكالة الإعلانية التي تمثّلها')
+    p.item(r, 'P9002_SECTOR_ID', label='القطاع', display='SELECT', source='SECTOR_ID', source_region=r, dtype='NUMBER',
+           lov='LK_ADV_SECTOR', null_text='- -', seq=40)
+    p.item(r, 'P9002_INDUSTRY_ID', label='النشاط التجاري', display='SELECT', source='INDUSTRY_ID', source_region=r,
+           dtype='NUMBER', lov='LK_ADV_INDUSTRY', null_text='- -', seq=50, new_line=False)
+    p.item(r, 'P9002_PHONE', label='الهاتف', source='PHONE', source_region=r, maxlen=30, seq=60)
+    p.item(r, 'P9002_EMAIL', label='البريد الإلكتروني', source='EMAIL', source_region=r, maxlen=255, seq=70, new_line=False)
+    p.item(r, 'P9002_WEBSITE', label='الموقع الإلكتروني', source='WEBSITE', source_region=r, maxlen=255, seq=80,
+           new_line=False)
+    p.item(r, 'P9002_ADDRESS', label='العنوان', source='ADDRESS', source_region=r, maxlen=500, seq=90)
+    p.item(r, 'P9002_NOTES', label='ملاحظات', display='TEXTAREA', source='NOTES', source_region=r, seq=100)
+    p.item(r, 'P9002_IS_ACTIVE', label='نشط', display='YESNO', source='IS_ACTIVE', source_region=r, default='Y', seq=110)
+    p.validation('Agency for company only', 'EXPRESSION',
+                 ":P9002_AGENCY_ID is null or :P9002_ACCOUNT_TYPE = 'COMPANY'",
+                 'الوكالة الممثلة للشركة المعلنة فقط', seq=10, expr2='PLSQL')
+    p.button(r, 'BACK', 'رجوع', action='REDIRECT_PAGE', position='CLOSE', seq=10,
+             redirect='f?p=&APP_ID.:9001:&SESSION.::&DEBUG.:::', exec_val=False)
+    delete = p.button(r, 'DELETE', 'حذف', position='DELETE', seq=20, cond_type='EXPRESSION',
+                      cond_item=":P9002_ACCOUNT_ID is not null and " + mgr_cond, cond_lang='PLSQL',
+                      db_action='DELETE', confirm='حذف الحساب وجهات اتصاله؟', exec_val=False)
+    p.button(r, 'SAVE', 'حفظ', position='CHANGE', hot=True, seq=30, cond_type='EXPRESSION',
+             cond_item=":P9002_ACCOUNT_ID is not null and " + can_add, cond_lang='PLSQL', db_action='UPDATE')
+    p.button(r, 'CREATE', 'إضافة', position='CREATE', hot=True, seq=40, cond_type='EXPRESSION',
+             cond_item=":P9002_ACCOUNT_ID is null and " + can_add, cond_lang='PLSQL', db_action='INSERT')
+    p.form_processes(r, 'Account', dml_cond=DML, success='تم الحفظ')
+    child_ir(p, 'جهات الاتصال', """select CONTACT_ID, NAME, JOB_TITLE, MOBILE, EMAIL,
+       case IS_PRIMARY when 'Y' then 'الأساسية' end as PRIMARY_AR, case IS_ACTIVE when 'N' then 'غير نشطة' end as ACTIVE_AR
+  from MOINFO_ADV_CONTACTS
+ where ACCOUNT_ID = :P9002_ACCOUNT_ID
+ order by IS_PRIMARY desc, NAME""",
+        [('CONTACT_ID', None, 'NUMBER'), ('NAME', 'الاسم', 'STRING'), ('JOB_TITLE', 'المسمى', 'STRING'),
+         ('MOBILE', 'الهاتف', 'STRING'), ('EMAIL', 'البريد', 'STRING'), ('PRIMARY_AR', 'الأساسية', 'STRING'),
+         ('ACTIVE_AR', 'الحالة', 'STRING')],
+        'CONTACT_ID', 9003, 'P9003_CONTACT_ID', 'P9002_ACCOUNT_ID', 9003, 'P9003_ACCOUNT_ID', 'إضافة جهة اتصال', seq=20)
+    p.ir_region('عملاء الوكالة', """select ACCOUNT_ID, NAME, SECTOR_AR, INDUSTRY_AR, PRIMARY_CONTACT
+  from MOINFO_ADV_V_ACCOUNTS
+ where AGENCY_ID = :P9002_ACCOUNT_ID
+ order by NAME""",
+        [('ACCOUNT_ID', None, 'NUMBER'), ('NAME', 'الشركة', 'STRING'), ('SECTOR_AR', 'القطاع', 'STRING'),
+         ('INDUSTRY_AR', 'النشاط', 'STRING'), ('PRIMARY_CONTACT', 'جهة الاتصال', 'STRING')],
+        pk='ACCOUNT_ID', link_page=9002, link_item='P9002_ACCOUNT_ID', seq=30,
+        cond=('EXPRESSION', ":P9002_ACCOUNT_ID is not null and :P9002_ACCOUNT_TYPE = 'AGENCY'", 'PLSQL'))
+    dr = p.ir_region('الفرص', ADV_DEAL_SEL + """
+ where (ADVERTISER_ID = :P9002_ACCOUNT_ID or AGENCY_ID = :P9002_ACCOUNT_ID)
+   and MOINFO_ADV.CAN_SEE(DEAL_ID) = 'Y'
+ order by IS_CLOSED, DEAL_DATE desc""", ADV_DEAL_COLS, pk='DEAL_ID', link_page=9005, link_item='P9005_DEAL_ID', seq=40,
+        cond=('ITEM_IS_NOT_NULL', 'P9002_ACCOUNT_ID'))
+    p.button(dr, 'ADD_DEAL', 'فرصة جديدة', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:9005:&SESSION.::&DEBUG.:9005:P9005_ADVERTISER_ID:&P9002_ACCOUNT_ID.', icon='fa-plus',
+             cond_type='EXPRESSION', cond_item=f":P9002_ACCOUNT_TYPE = 'COMPANY' and {can_add}", cond_lang='PLSQL')
+    p.branch(9001, seq=10, when_button=delete)
+    p.branch(9002, seq=100, items=('P9002_ACCOUNT_ID', '&P9002_ACCOUNT_ID.'))
+    pages.append(p)
+
+    # 9003 contact
+    pages.append(child_form(9003, 'جهة اتصال', 'MOINFO_ADV_CONTACTS', 'CONTACT_ID', 'ACCOUNT_ID', 9002, 'P9002_ACCOUNT_ID', [
+        dict(col='NAME', label='الاسم', required=True, maxlen=300),
+        dict(col='JOB_TITLE', label='المسمى الوظيفي', maxlen=250),
+        dict(col='MOBILE', label='الهاتف', maxlen=30),
+        dict(col='EMAIL', label='البريد الإلكتروني', maxlen=255),
+        dict(col='IS_PRIMARY', label='جهة الاتصال الأساسية', display='YESNO', default='N'),
+        dict(col='NOTES', label='ملاحظات', display='TEXTAREA'),
+        dict(col='IS_ACTIVE', label='نشطة', display='YESNO', default='Y'),
+    ], 'MOD_ADV'))
+
+    # 9004 deals
+    p = Page(9004, 'الفرص الإعلانية', authz='MOD_ADV', alias='ADV-DEALS')
+    reg = p.ir_region('الفرص الإعلانية', ADV_DEAL_SEL + """
+ where IS_ACTIVE = 'Y' and MOINFO_ADV.CAN_SEE(DEAL_ID) = 'Y'
+ order by IS_CLOSED, NEXT_FOLLOWUP_DATE nulls last, DEAL_DATE desc""", ADV_DEAL_COLS, pk='DEAL_ID', link_page=9005,
+        link_item='P9005_DEAL_ID')
+    p.button(reg, 'CREATE', 'فرصة جديدة', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:9005:&SESSION.::&DEBUG.:9005::', icon='fa-plus',
+             cond_type='EXPRESSION', cond_item=can_add, cond_lang='PLSQL')
+    pages.append(p)
+
+    # 9005 deal
+    p = Page(9005, 'فرصة إعلانية', authz='MOD_ADV', alias='ADV-DEAL')
+    guard(p, ":P9005_DEAL_ID is not null and MOINFO_ADV.CAN_SEE(:P9005_DEAL_ID) = 'N'", 'لا تملك صلاحية على هذه الفرصة')
+    r = p.form_region('فرصة إعلانية', 'MOINFO_ADV_DEALS')
+    p.item(r, 'P9005_DEAL_ID', display='HIDDEN', source='DEAL_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
+    p.item(r, 'P9005_TITLE', label='الفرصة', source='TITLE', source_region=r, required=True, maxlen=300, seq=10)
+    p.item(r, 'P9005_ADVERTISER_ID', label='المعلن', display='POPUP', source='ADVERTISER_ID', source_region=r,
+           dtype='NUMBER', lov='ADV_COMPANIES', null_text='', required=True, seq=20)
+    p.item(r, 'P9005_AGENCY_ID', label='عبر الوكالة', display='SELECT', source='AGENCY_ID', source_region=r, dtype='NUMBER',
+           lov='ADV_AGENCIES', null_text='- مباشر -', seq=30, new_line=False,
+           help='عند الإضافة تؤخذ وكالة المعلن إن تُركت فارغة')
+    p.item(r, 'P9005_CONTACT_ID', label='جهة الاتصال', display='SELECT', source='CONTACT_ID', source_region=r,
+           dtype='NUMBER', lov='ADV_DEAL_CONTACTS', null_text='- -', seq=40, cascade='P9005_ADVERTISER_ID,P9005_AGENCY_ID')
+    p.item(r, 'P9005_MEDIA_ID', label='الوسيلة الإعلامية', display='SELECT', source='MEDIA_ID', source_region=r,
+           dtype='NUMBER', lov='LK_ADV_MEDIA', null_text='- -', seq=50, new_line=False)
+    p.item(r, 'P9005_STATUS_ID', label='الحالة', display='SELECT', source='STATUS_ID', source_region=r, dtype='NUMBER',
+           lov='LK_ADV_DEAL_STATUS', seq=60, default_expr="MOINFO_HD.LOOKUP_ID('ADV_DEAL_STATUS', 'NEW')")
+    p.item(r, 'P9005_OWNER_EMPLOYEE_ID', label='المندوب المسؤول', display='POPUP', source='OWNER_EMPLOYEE_ID',
+           source_region=r, dtype='NUMBER', lov='EMPLOYEES', null_text='', seq=70, new_line=False,
+           default_expr='MOINFO_HR.MY_EMPLOYEE_ID')
+    p.item(r, 'P9005_DEAL_DATE', label='التاريخ', display='DATE', source='DEAL_DATE', source_region=r, dtype='DATE',
+           seq=80, default_expr="to_char(sysdate, 'DD/MM/YYYY')")
+    p.item(r, 'P9005_EXPECTED_AMOUNT', label='القيمة المتوقعة', display='NUMBER', source='EXPECTED_AMOUNT',
+           source_region=r, dtype='NUMBER', seq=90, new_line=False)
+    p.item(r, 'P9005_NEXT_FOLLOWUP_DATE', label='المتابعة القادمة', display='DATE', source='NEXT_FOLLOWUP_DATE',
+           source_region=r, dtype='DATE', seq=100, new_line=False)
+    p.item(r, 'P9005_CLOSED_DATE', label='تاريخ الإغلاق', display='DISPLAY', source='CLOSED_DATE', source_region=r,
+           dtype='DATE', seq=105, cond=('ITEM_IS_NOT_NULL', 'P9005_CLOSED_DATE'))
+    p.item(r, 'P9005_SALES_HISTORY', label='تاريخ التعامل', display='TEXTAREA', source='SALES_HISTORY', source_region=r,
+           seq=110)
+    p.item(r, 'P9005_OBJECTIONS', label='الاعتراضات', display='TEXTAREA', source='OBJECTIONS', source_region=r, seq=120,
+           new_line=False)
+    p.item(r, 'P9005_NOTES', label='ملاحظات', display='TEXTAREA', source='NOTES', source_region=r, seq=130)
+    p.item(r, 'P9005_IS_ACTIVE', label='نشطة', display='YESNO', source='IS_ACTIVE', source_region=r, default='Y', seq=140,
+           new_line=False)
+    p.button(r, 'BACK', 'رجوع', action='REDIRECT_PAGE', position='CLOSE', seq=10,
+             redirect='f?p=&APP_ID.:9004:&SESSION.::&DEBUG.:::', exec_val=False)
+    delete = p.button(r, 'DELETE', 'حذف', position='DELETE', seq=20, cond_type='EXPRESSION',
+                      cond_item=":P9005_DEAL_ID is not null and " + mgr_cond, cond_lang='PLSQL',
+                      db_action='DELETE', confirm='حذف الفرصة وسجل متابعتها؟', exec_val=False)
+    p.button(r, 'SAVE', 'حفظ', position='CHANGE', hot=True, seq=30, cond_type='EXPRESSION',
+             cond_item=":P9005_DEAL_ID is not null and " + can_add, cond_lang='PLSQL', db_action='UPDATE')
+    p.button(r, 'CREATE', 'إضافة', position='CREATE', hot=True, seq=40, cond_type='EXPRESSION',
+             cond_item=":P9005_DEAL_ID is null and " + can_add, cond_lang='PLSQL', db_action='INSERT')
+    p.form_processes(r, 'Deal', dml_cond=DML, success='تم الحفظ')
+    ar = p.static_region('إضافة متابعة', None, seq=20,
+                         cond=('EXPRESSION', f":P9005_DEAL_ID is not null and {can_add}", 'PLSQL'))
+    note = p.item(ar, 'P9005_ACT_NOTE', label='ما تم', display='TEXTAREA', seq=10)
+    p.item(ar, 'P9005_ACT_TYPE_ID', label='النوع', display='SELECT', dtype='NUMBER', lov='LK_ADV_ACTIVITY_TYPE',
+           null_text='- -', seq=20)
+    p.item(ar, 'P9005_ACT_DATE', label='التاريخ', display='DATE', dtype='DATE', seq=30, new_line=False,
+           default_expr="to_char(sysdate, 'DD/MM/YYYY')")
+    p.item(ar, 'P9005_ACT_NEXT', label='المتابعة القادمة', display='DATE', dtype='DATE', seq=40, new_line=False)
+    p.item(ar, 'P9005_ACT_STATUS_ID', label='تغيير الحالة إلى', display='SELECT', dtype='NUMBER', lov='LK_ADV_DEAL_STATUS',
+           null_text='- بدون تغيير -', seq=50, new_line=False)
+    add = p.button(ar, 'ADD_ACTIVITY', 'إضافة المتابعة', position='NEXT', hot=True, seq=10)
+    p.validation('Activity note', 'ITEM_NOT_NULL', 'P9005_ACT_NOTE', 'اكتب ما تم في المتابعة', item=note, seq=40,
+                 when_button=add)
+    p.plsql_process('Add activity', """MOINFO_ADV.ADD_ACTIVITY(
+    p_deal_id   => :P9005_DEAL_ID,
+    p_note      => :P9005_ACT_NOTE,
+    p_type_id   => :P9005_ACT_TYPE_ID,
+    p_date      => nvl(to_date(:P9005_ACT_DATE, 'DD/MM/YYYY'), trunc(sysdate)),
+    p_next_date => to_date(:P9005_ACT_NEXT, 'DD/MM/YYYY'),
+    p_status_id => :P9005_ACT_STATUS_ID);
+:P9005_ACT_NOTE := null;
+:P9005_ACT_TYPE_ID := null;
+:P9005_ACT_DATE := null;
+:P9005_ACT_NEXT := null;
+:P9005_ACT_STATUS_ID := null;""", seq=30, when_button=add, success='أُضيفت المتابعة')
+    p.ir_region('سجل المتابعة', """select ACTIVITY_ID, ACTIVITY_DATE, ACTIVITY_TYPE_AR, NOTE_TEXT, NEXT_FOLLOWUP_DATE, STATUS_AR, CREATED_BY_NAME
+  from MOINFO_ADV_V_ACTIVITIES
+ where DEAL_ID = :P9005_DEAL_ID
+ order by ACTIVITY_DATE desc, ACTIVITY_ID desc""",
+        [('ACTIVITY_ID', None, 'NUMBER'), ('ACTIVITY_DATE', 'التاريخ', 'DATE'), ('ACTIVITY_TYPE_AR', 'النوع', 'STRING'),
+         ('NOTE_TEXT', 'ما تم', 'STRING'), ('NEXT_FOLLOWUP_DATE', 'المتابعة القادمة', 'DATE'),
+         ('STATUS_AR', 'الحالة الجديدة', 'STRING'), ('CREATED_BY_NAME', 'بواسطة', 'STRING')],
+        seq=30, cond=('ITEM_IS_NOT_NULL', 'P9005_DEAL_ID'))
+    p.branch(9004, seq=10, when_button=delete)
+    p.branch(9005, seq=100, items=('P9005_DEAL_ID', '&P9005_DEAL_ID.'))
+    pages.append(p)
+
+    # 9006 due follow-ups
+    p = Page(9006, 'المتابعات المستحقة', authz='MOD_ADV', alias='ADV-DUE')
+    p.ir_region('المتابعات المستحقة خلال أسبوع والمتأخرة', ADV_DEAL_SEL + """
+ where IS_ACTIVE = 'Y' and IS_CLOSED = 'N'
+   and NEXT_FOLLOWUP_DATE <= trunc(sysdate) + 7
+   and MOINFO_ADV.CAN_SEE(DEAL_ID) = 'Y'
+ order by NEXT_FOLLOWUP_DATE""", ADV_DEAL_COLS, pk='DEAL_ID', link_page=9005, link_item='P9005_DEAL_ID')
+    pages.append(p)
+
+    # 9007 stats
+    p = Page(9007, 'إحصائيات القسم التجاري', authz='MOD_ADV', alias='ADV-STATS')
+    p.ir_region('الفرص حسب الشهر والوسيلة والحالة والمندوب', """select to_char(DEAL_MONTH, 'YYYY-MM') as MONTH_TXT, MEDIA_AR, STATUS_AR, OWNER_AR, DEALS_COUNT, EXPECTED_AMOUNT
+  from MOINFO_ADV_V_STATS
+ where MOINFO_SEC.DATA_SCOPE('ADV') = 'ALL'
+    or OWNER_EMPLOYEE_ID = MOINFO_HR.MY_EMPLOYEE_ID
+    or (MOINFO_SEC.DATA_SCOPE('ADV') = 'UNIT' and OWNER_UNIT_ID is not null
+        and MOINFO_SEC.CAN_SEE_UNIT('ADV', OWNER_UNIT_ID) = 'Y')
+ order by DEAL_MONTH desc, MEDIA_AR, STATUS_AR""",
+        [('MONTH_TXT', 'الشهر', 'STRING'), ('MEDIA_AR', 'الوسيلة', 'STRING'), ('STATUS_AR', 'الحالة', 'STRING'),
+         ('OWNER_AR', 'المندوب', 'STRING'), ('DEALS_COUNT', 'الفرص', 'NUMBER'),
+         ('EXPECTED_AMOUNT', 'القيمة المتوقعة', 'NUMBER')])
+    pages.append(p)
+
+    # 9008/9009 lists
+    pages += crud(9008, 9009, 'قوائم القسم التجاري', 'قيمة', 'MOINFO_LOOKUPS', 'LOOKUP_ID',
+        f"""select l.LOOKUP_ID, t.TYPE_NAME_AR, l.NAME_AR, l.NAME_EN, l.SORT_ORDER, {YN.format(c='l.IS_ACTIVE')} as IS_ACTIVE_AR
+  from MOINFO_LOOKUPS l
+  join MOINFO_LOOKUP_TYPES t on t.LOOKUP_TYPE = l.LOOKUP_TYPE
+ where l.LOOKUP_TYPE in ('ADV_SECTOR', 'ADV_INDUSTRY', 'ADV_MEDIA', 'ADV_DEAL_STATUS', 'ADV_ACTIVITY_TYPE')
+ order by t.TYPE_NAME_AR, l.SORT_ORDER, l.NAME_AR""",
+        [('LOOKUP_ID', None, 'NUMBER'), ('TYPE_NAME_AR', 'القائمة', 'STRING'), ('NAME_AR', 'القيمة', 'STRING'),
+         ('NAME_EN', 'بالإنجليزية', 'STRING'), ('SORT_ORDER', 'الترتيب', 'NUMBER'), ('IS_ACTIVE_AR', 'نشطة', 'STRING')],
+        [dict(col='LOOKUP_TYPE', label='القائمة', display='SELECT', lov='ADV_LIST_TYPES', required=True, dtype='VARCHAR2'),
+         dict(col='NAME_AR', label='القيمة بالعربية', required=True, maxlen=255),
+         dict(col='NAME_EN', label='بالإنجليزية', maxlen=255, new_line=False),
+         dict(col='SORT_ORDER', label='الترتيب', display='NUMBER', dtype='NUMBER'),
+         dict(col='IS_ACTIVE', label='نشطة', display='YESNO', default='Y', new_line=False)],
+        'ADV_MANAGER')
+    return pages
+
 def all_pages():
-    return hr_pages() + evt_pages() + med_pages() + tsk_pages() + att_pages() + hd_pages() + cat_pages() + prc_pages() + std_pages()
+    return (hr_pages() + evt_pages() + med_pages() + tsk_pages() + att_pages() + hd_pages() + cat_pages()
+            + prc_pages() + std_pages() + adv_pages())
 
