@@ -232,6 +232,7 @@ class Page:
             ("p_plug_query_num_rows", "15"),
             ("p_plug_display_condition_type", lit(cond[0]) if cond else None),
             ("p_plug_display_when_condition", lit(cond[1]) if cond else None),
+            ("p_plug_display_when_cond2", lit(cond[2]) if cond and len(cond) > 2 else None),
             ("p_attributes", attrs({'expand_shortcuts': 'N', 'output_as': 'HTML'})),
         ]))
         return i
@@ -270,6 +271,7 @@ class Page:
             ("p_plug_source_type", lit('NATIVE_IR')),
             ("p_plug_display_condition_type", lit(cond[0]) if cond else None),
             ("p_plug_display_when_condition", lit(cond[1]) if cond else None),
+            ("p_plug_display_when_cond2", lit(cond[2]) if cond and len(cond) > 2 else None),
             ("p_plug_query_headings_type", lit('COLON_DELMITED_LIST')),
             ("p_prn_content_disposition", lit('ATTACHMENT')),
             ("p_prn_units", lit('INCHES')),
@@ -362,7 +364,8 @@ class Page:
 
     # ---- buttons -------------------------------------------------------------
     def button(self, region, name, label, action='SUBMIT', position='NEXT', hot=False, seq=10,
-               redirect=None, cond_item=None, cond_type=None, db_action=None, confirm=None, icon=None, exec_val=True):
+               redirect=None, cond_item=None, cond_type=None, db_action=None, confirm=None, icon=None, exec_val=True,
+               cond_lang=None):
         i = nid()
         self.calls.append(call("wwv_flow_imp_page.create_page_button", [
             ("p_id", rid(i)),
@@ -381,6 +384,7 @@ class Page:
             ("p_confirm_message", lit(confirm) if confirm else None),
             ("p_confirm_style", lit('danger') if confirm else None),
             ("p_button_condition", lit(cond_item) if cond_item else None),
+            ("p_button_condition2", lit(cond_lang) if cond_lang else None),
             ("p_button_condition_type", lit(cond_type) if cond_type else None),
             ("p_icon_css_classes", lit(icon) if icon else None),
             ("p_database_action", lit(db_action) if db_action else None),
@@ -462,6 +466,7 @@ class Page:
             ("p_tag_attributes", lit(f'autocomplete="{pwd_autocomplete}"') if pwd_autocomplete else None),
             ("p_begin_on_new_line", lit('N') if not new_line else None),
             ("p_display_when", lit(cond[1]) if cond else None),
+            ("p_display_when2", lit(cond[2]) if cond and len(cond) > 2 else None),
             ("p_display_when_type", lit(cond[0]) if cond else None),
             ("p_field_template", str(label_tpl) if label_tpl else None),
             ("p_item_icon_css_classes", lit(icon) if icon else None),
@@ -509,6 +514,7 @@ class Page:
             ("p_error_display_location", lit('INLINE_IN_NOTIFICATION')),
             ("p_process_when_button_id", rid(when_button) if when_button else None),
             ("p_process_when", lit(cond[1]) if cond else None),
+            ("p_process_when2", lit(cond[2]) if cond and len(cond) > 2 else None),
             ("p_process_when_type", lit(cond[0]) if cond else None),
             ("p_process_success_message", lit(success) if success else None),
             ("p_internal_uid", str(i)),

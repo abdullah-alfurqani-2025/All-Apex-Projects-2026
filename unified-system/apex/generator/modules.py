@@ -1,4 +1,4 @@
-"""Module pages: HR (1000), EVT (2000), MED (3000), TSK (4000), ATT (5000)."""
+"""Module pages: HR (1000), EVT (2000), MED (3000), TSK (4000), ATT (5000), HD (6000), shared catalog (100-109)."""
 from gen_app import *
 
 DML = 'CREATE,SAVE,DELETE'
@@ -8,9 +8,13 @@ DML = 'CREATE,SAVE,DELETE'
 # ------------------------------------------------------------------------------
 def authorizations():
     calls = []
-    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT']:
+    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD']:
         calls.append(authorization(f'{code}_MANAGER', f"return MOINFO_SEC.HAS_ROLE('{code}', 'MANAGER');",
                                    'هذه الصفحة للمشرفين في الوحدة'))
+    calls.append(authorization('CAT_MANAGER', """return MOINFO_SEC.IS_ADMIN
+    or MOINFO_SEC.HAS_ROLE('HD', 'MANAGER')
+    or MOINFO_SEC.HAS_ROLE('PRC', 'MANAGER')
+    or MOINFO_SEC.HAS_ROLE('STD', 'MANAGER');""", 'الكتالوج المشترك لمشرفي الدعم الفني والمشتريات والمخزن'))
     calls.append(authorization('HAS_EMPLOYEE', 'return MOINFO_HR.MY_EMPLOYEE_ID is not null;',
                                'حسابك غير مرتبط بموظف'))
     return calls
@@ -25,7 +29,7 @@ def lovs():
     out = []
     for t in ['HR_MARITAL_STATUS', 'HR_RELIGION', 'HR_APPOINTMENT_TYPE', 'HR_QUALIFICATION', 'HR_BANK',
               'HR_EMP_STATUS', 'EVT_TYPE', 'MED_EVENT', 'MED_EVENT_TYPE', 'TSK_STATUS', 'TSK_TYPE',
-              'TSK_CATEGORY', 'ATT_CATEGORY']:
+              'TSK_CATEGORY', 'ATT_CATEGORY', 'HD_DEVICE_STATUS', 'HD_REQUEST_STATUS']:
         out.append(lookup_lov(t))
     out.append(lov('COUNTRIES', "select NAME_AR d, COUNTRY_ID r from MOINFO_COUNTRIES where IS_ACTIVE = 'Y' order by SORT_ORDER, NAME_AR"))
     out.append(lov('WILAYATS', """select g.NAME_AR || ' - ' || w.NAME_AR d, w.WILAYAT_ID r
@@ -40,6 +44,18 @@ def lovs():
   from MOINFO_EMPLOYEES e
  where e.IS_ACTIVE = 'Y' and MOINFO_EVT.CAN_SEE(e.EMPLOYEE_ID) = 'Y'
  order by e.NAME_AR"""))
+    out.append(lov('CAT_PRODUCT_TYPES', "select NAME_AR d, PRODUCT_TYPE_ID r from MOINFO_CAT_PRODUCT_TYPES where IS_ACTIVE = 'Y' order by SORT_ORDER, NAME_AR"))
+    out.append(lov('CAT_BRANDS', "select NAME d, BRAND_ID r from MOINFO_CAT_BRANDS where IS_ACTIVE = 'Y' order by NAME"))
+    out.append(lov('CAT_MODELS', """select FULL_NAME || nvl2(PRODUCT_TYPE_AR, ' (' || PRODUCT_TYPE_AR || ')', '') d, MODEL_ID r
+  from MOINFO_CAT_V_MODELS where IS_ACTIVE = 'Y' order by BRAND_NAME, MODEL_NAME"""))
+    out.append(lov('CAT_SUPPLIERS', "select NAME_AR d, SUPPLIER_ID r from MOINFO_CAT_SUPPLIERS where IS_ACTIVE = 'Y' order by NAME_AR"))
+    out.append(lov('CAT_WARRANTY_TYPES', "select NAME_AR d, WARRANTY_TYPE_ID r from MOINFO_CAT_WARRANTY_TYPES where IS_ACTIVE = 'Y' order by MONTHS"))
+    out.append(lov('HD_PURCHASE_ORDERS', "select PO_NO || nvl2(PO_NAME, ' - ' || PO_NAME, '') d, PO_ID r from MOINFO_HD_PURCHASE_ORDERS where IS_ACTIVE = 'Y' order by PO_DATE desc nulls last, PO_NO"))
+    out.append(lov('HD_REQUEST_DEVICES', """select SERIAL_NO || ' - ' || nvl(DEVICE_NAME, BRAND_NAME || ' ' || MODEL_NAME) d, DEVICE_ID r
+  from MOINFO_HD_V_DEVICES
+ where IS_ACTIVE = 'Y'
+   and (MOINFO_HD.IS_MANAGER = 'Y' or CURRENT_EMPLOYEE_ID = MOINFO_HR.MY_EMPLOYEE_ID)
+ order by SERIAL_NO"""))
     out.append(static_lov('MED_CREW_ROLE', [('مصور', 'PHOTOGRAPHER'), ('مونتاج', 'EDITOR'), ('مراسل', 'REPORTER')]))
     out.append(static_lov('TSK_PRIORITY', [('منخفضة', 'LOW'), ('عادية', 'NORMAL'), ('عالية', 'HIGH'), ('عاجلة', 'URGENT')]))
     return out
@@ -71,12 +87,29 @@ MODULE_MENU = [
     ('ATT', 'المرفقات والقوالب', 'fa-paperclip', [
         ('المستندات', 5001, '5001,5002', 'MOD_ATT'),
     ]),
+    ('HD', 'الدعم الفني', 'fa-life-ring', [
+        ('طلبات الدعم', 6001, '6001,6002', 'MOD_HD'),
+        ('أجهزتي', 6009, '6009', 'HAS_EMPLOYEE'),
+        ('الأجهزة', 6003, '6003,6004,6005', 'HD_MANAGER'),
+        ('أوامر الشراء', 6006, '6006,6007', 'HD_MANAGER'),
+        ('الضمان', 6008, '6008', 'HD_MANAGER'),
+    ]),
+    ('CAT', 'الكتالوج المشترك', 'fa-tags', [
+        ('أنواع المنتجات', 100, '100,101', 'CAT_MANAGER'),
+        ('الماركات', 102, '102,103', 'CAT_MANAGER'),
+        ('الموديلات', 104, '104,105', 'CAT_MANAGER'),
+        ('الموردون', 106, '106,107', 'CAT_MANAGER'),
+        ('أنواع الضمان', 108, '108,109', 'CAT_MANAGER'),
+    ]),
 ]
+
+# authorization of each menu group (default MOD_<code>)
+GROUP_AUTHZ = {'HR': None, 'CAT': 'CAT_MANAGER'}
 
 def menu_items():
     items = [dict(text='بياناتي', page=1010, icon='fa-user-circle', authz='HAS_EMPLOYEE', current='1010', static='my-data')]
     for code, name, icon, children in MODULE_MENU:
-        items.append(dict(text=name, target='#', icon=icon, key=f'm-{code}', authz=f'MOD_{code}' if code != 'HR' else None,
+        items.append(dict(text=name, target='#', icon=icon, key=f'm-{code}', authz=GROUP_AUTHZ.get(code, f'MOD_{code}'),
                           static=f'mod-{code.lower()}'))
         for text, page, current, az in children:
             items.append(dict(text=text, page=page, parent=f'm-{code}', authz=az, current=current,
@@ -90,11 +123,13 @@ def home_cards():
         'MED': 'التغطيات والقنوات والبرامج وفريق العمل',
         'TSK': 'المهام وسجل المتابعة والإحصائيات',
         'ATT': 'المناوبات والمحاضر ونماذج الخطابات',
+        'HD': 'طلبات الدعم والأجهزة والتسليم والضمان',
+        'CAT': 'الماركات والموديلات والموردون وأنواع الضمان',
     }
     out = [dict(text='بياناتي', page=1010, icon='fa-user-circle', authz='HAS_EMPLOYEE', desc='بياناتك الوظيفية والشخصية',
                 static='home-my')]
     for code, name, icon, children in MODULE_MENU:
-        out.append(dict(text=name, page=children[0][1], icon=icon, authz=f'MOD_{code}', desc=descr[code],
+        out.append(dict(text=name, page=children[0][1], icon=icon, authz=GROUP_AUTHZ.get(code) or f'MOD_{code}', desc=descr[code],
                         static=f'home-mod-{code.lower()}'))
     return out
 
@@ -710,5 +745,354 @@ end;""", seq=30, cond=('REQUEST_IN_CONDITION', 'CREATE,SAVE'))
     pages.append(p)
     return pages
 
+# ------------------------------------------------------------------------------
+# Shared catalog (100-109)
+# ------------------------------------------------------------------------------
+def cat_pages():
+    pages = []
+    pages += crud(100, 101, 'أنواع المنتجات', 'نوع منتج', 'MOINFO_CAT_PRODUCT_TYPES', 'PRODUCT_TYPE_ID',
+        f"""select PRODUCT_TYPE_ID, NAME_AR, NAME_EN, SORT_ORDER, {YN.format(c='IS_ACTIVE')} as IS_ACTIVE_AR from MOINFO_CAT_PRODUCT_TYPES""",
+        [('PRODUCT_TYPE_ID', None, 'NUMBER'), ('NAME_AR', 'النوع', 'STRING'), ('NAME_EN', 'بالإنجليزية', 'STRING'),
+         ('SORT_ORDER', 'الترتيب', 'NUMBER'), ('IS_ACTIVE_AR', 'نشط', 'STRING')],
+        [dict(col='NAME_AR', label='النوع بالعربية', required=True, maxlen=150),
+         dict(col='NAME_EN', label='بالإنجليزية', maxlen=150),
+         dict(col='SORT_ORDER', label='الترتيب', display='NUMBER', dtype='NUMBER'),
+         dict(col='IS_ACTIVE', label='نشط', display='YESNO', default='Y', new_line=False)],
+        'CAT_MANAGER')
+    pages += crud(102, 103, 'الماركات', 'ماركة', 'MOINFO_CAT_BRANDS', 'BRAND_ID',
+        f"""select b.BRAND_ID, b.NAME, (select count(*) from MOINFO_CAT_MODELS m where m.BRAND_ID = b.BRAND_ID) as MODELS_COUNT,
+       {YN.format(c='b.IS_ACTIVE')} as IS_ACTIVE_AR
+  from MOINFO_CAT_BRANDS b""",
+        [('BRAND_ID', None, 'NUMBER'), ('NAME', 'الماركة', 'STRING'), ('MODELS_COUNT', 'عدد الموديلات', 'NUMBER'),
+         ('IS_ACTIVE_AR', 'نشطة', 'STRING')],
+        [dict(col='NAME', label='الماركة', required=True, maxlen=150),
+         dict(col='IS_ACTIVE', label='نشطة', display='YESNO', default='Y', new_line=False)],
+        'CAT_MANAGER')
+    pages += crud(104, 105, 'الموديلات', 'موديل', 'MOINFO_CAT_MODELS', 'MODEL_ID',
+        f"""select m.MODEL_ID, m.BRAND_NAME, m.MODEL_NAME, m.PRODUCT_TYPE_AR, {YN.format(c='m.IS_ACTIVE')} as IS_ACTIVE_AR
+  from MOINFO_CAT_V_MODELS m""",
+        [('MODEL_ID', None, 'NUMBER'), ('BRAND_NAME', 'الماركة', 'STRING'), ('MODEL_NAME', 'الموديل', 'STRING'),
+         ('PRODUCT_TYPE_AR', 'نوع المنتج', 'STRING'), ('IS_ACTIVE_AR', 'نشط', 'STRING')],
+        [dict(col='BRAND_ID', label='الماركة', display='SELECT', lov='CAT_BRANDS', null_text='- اختر -', dtype='NUMBER',
+              required=True),
+         dict(col='NAME', label='الموديل', required=True, maxlen=150),
+         dict(col='PRODUCT_TYPE_ID', label='نوع المنتج', display='SELECT', lov='CAT_PRODUCT_TYPES', null_text='- -',
+              dtype='NUMBER'),
+         dict(col='IS_ACTIVE', label='نشط', display='YESNO', default='Y', new_line=False)],
+        'CAT_MANAGER')
+    pages += crud(106, 107, 'الموردون', 'مورد', 'MOINFO_CAT_SUPPLIERS', 'SUPPLIER_ID',
+        f"""select SUPPLIER_ID, NAME_AR, NAME_EN, CONTACT_PERSON, PHONE, EMAIL, {YN.format(c='IS_ACTIVE')} as IS_ACTIVE_AR
+  from MOINFO_CAT_SUPPLIERS""",
+        [('SUPPLIER_ID', None, 'NUMBER'), ('NAME_AR', 'المورد', 'STRING'), ('NAME_EN', 'بالإنجليزية', 'STRING'),
+         ('CONTACT_PERSON', 'المسؤول', 'STRING'), ('PHONE', 'الهاتف', 'STRING'), ('EMAIL', 'البريد', 'STRING'),
+         ('IS_ACTIVE_AR', 'نشط', 'STRING')],
+        [dict(col='NAME_AR', label='المورد بالعربية', required=True, maxlen=200),
+         dict(col='NAME_EN', label='بالإنجليزية', maxlen=200),
+         dict(col='CONTACT_PERSON', label='الشخص المسؤول', maxlen=200),
+         dict(col='PHONE', label='الهاتف', maxlen=30, new_line=False),
+         dict(col='EMAIL', label='البريد الإلكتروني', maxlen=255, new_line=False),
+         dict(col='ADDRESS', label='العنوان', display='TEXTAREA'),
+         dict(col='IS_ACTIVE', label='نشط', display='YESNO', default='Y')],
+        'CAT_MANAGER')
+    pages += crud(108, 109, 'أنواع الضمان', 'نوع ضمان', 'MOINFO_CAT_WARRANTY_TYPES', 'WARRANTY_TYPE_ID',
+        f"""select WARRANTY_TYPE_ID, NAME_AR, MONTHS, {YN.format(c='IS_ACTIVE')} as IS_ACTIVE_AR from MOINFO_CAT_WARRANTY_TYPES""",
+        [('WARRANTY_TYPE_ID', None, 'NUMBER'), ('NAME_AR', 'نوع الضمان', 'STRING'), ('MONTHS', 'المدة (أشهر)', 'NUMBER'),
+         ('IS_ACTIVE_AR', 'نشط', 'STRING')],
+        [dict(col='NAME_AR', label='نوع الضمان', required=True, maxlen=100),
+         dict(col='MONTHS', label='المدة بالأشهر', display='NUMBER', dtype='NUMBER', required=True,
+              help='تُحسب نهاية الضمان تلقائيًا من تاريخ البداية وهذه المدة'),
+         dict(col='IS_ACTIVE', label='نشط', display='YESNO', default='Y', new_line=False)],
+        'CAT_MANAGER')
+    return pages
+
+# ------------------------------------------------------------------------------
+# HD
+# ------------------------------------------------------------------------------
+HD_MGR = "MOINFO_HD.IS_MANAGER = 'Y'"
+
+def hd_pages():
+    pages = []
+    req_cols = [('REQUEST_ID', 'رقم الطلب', 'NUMBER'), ('TITLE', 'الطلب', 'STRING'), ('STATUS_AR', 'الحالة', 'STRING'),
+                ('REQUESTER_AR', 'صاحب الطلب', 'STRING'), ('REQUESTER_UNIT_AR', 'الجهة', 'STRING'),
+                ('REQUESTER_EXT', 'التحويلة', 'STRING'), ('SERIAL_NO', 'الجهاز', 'STRING'),
+                ('ASSIGNED_AR', 'الفني', 'STRING'), ('REQUEST_DATE', 'تاريخ الطلب', 'DATE'),
+                ('CLOSED_DATE', 'تاريخ الإغلاق', 'DATE'), ('DURATION_DAYS', 'المدة (أيام)', 'NUMBER'),
+                ('IS_CLOSED', None, 'STRING')]
+    req_sel = """select r.REQUEST_ID, r.TITLE, r.STATUS_AR, r.REQUESTER_AR, r.REQUESTER_UNIT_AR, r.REQUESTER_EXT, r.SERIAL_NO,
+       r.ASSIGNED_AR, r.REQUEST_DATE, r.CLOSED_DATE, r.DURATION_DAYS, r.IS_CLOSED
+  from MOINFO_HD_V_REQUESTS r"""
+
+    # 6001 requests
+    p = Page(6001, 'طلبات الدعم', authz='MOD_HD', alias='HD-REQUESTS')
+    reg = p.ir_region('طلبات الدعم', req_sel + """
+ where r.IS_ACTIVE = 'Y'
+   and MOINFO_HD.CAN_SEE_REQUEST(r.REQUEST_ID) = 'Y'
+ order by r.IS_CLOSED, r.REQUEST_DATE desc, r.REQUEST_ID desc""", req_cols,
+        pk='REQUEST_ID', link_page=6002, link_item='P6002_REQUEST_ID')
+    p.button(reg, 'CREATE', 'طلب دعم جديد', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:6002:&SESSION.::&DEBUG.:6002::', icon='fa-plus')
+    pages.append(p)
+
+    # 6002 request form
+    p = Page(6002, 'طلب دعم', authz='MOD_HD', alias='HD-REQUEST')
+    guard(p, ":P6002_REQUEST_ID is not null and MOINFO_HD.CAN_SEE_REQUEST(:P6002_REQUEST_ID) = 'N'",
+          'لا تملك صلاحية على هذا الطلب')
+    r = p.form_region('طلب دعم', 'MOINFO_HD_REQUESTS')
+    mgr = ('EXPRESSION', HD_MGR, 'PLSQL')
+    p.item(r, 'P6002_REQUEST_ID', display='HIDDEN', source='REQUEST_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
+    p.item(r, 'P6002_TITLE', label='عنوان المشكلة', source='TITLE', source_region=r, required=True, maxlen=300, seq=10)
+    p.item(r, 'P6002_DEVICE_ID', label='الجهاز', display='POPUP', source='DEVICE_ID', source_region=r, dtype='NUMBER',
+           lov='HD_REQUEST_DEVICES', null_text='', seq=20, help='اختياري: الجهاز الذي فيه المشكلة')
+    p.item(r, 'P6002_DESCRIPTION', label='وصف المشكلة', display='TEXTAREA', source='DESCRIPTION', source_region=r, seq=30)
+    p.item(r, 'P6002_REQUESTER_EMPLOYEE_ID', label='صاحب الطلب', display='POPUP', source='REQUESTER_EMPLOYEE_ID',
+           source_region=r, dtype='NUMBER', lov='EMPLOYEES', null_text='', seq=40, cond=mgr,
+           default_expr='MOINFO_HR.MY_EMPLOYEE_ID')
+    p.item(r, 'P6002_REQUEST_DATE', label='تاريخ الطلب', display='DATE', source='REQUEST_DATE', source_region=r,
+           dtype='DATE', seq=50, new_line=False, cond=mgr, default_expr="to_char(sysdate, 'DD/MM/YYYY')")
+    p.item(r, 'P6002_STATUS_ID', label='الحالة', display='SELECT', source='STATUS_ID', source_region=r, dtype='NUMBER',
+           lov='LK_HD_REQUEST_STATUS', seq=60, cond=mgr, default_expr="MOINFO_HD.LOOKUP_ID('HD_REQUEST_STATUS', 'NEW')")
+    p.item(r, 'P6002_ASSIGNED_EMPLOYEE_ID', label='الفني المتابع', display='POPUP', source='ASSIGNED_EMPLOYEE_ID',
+           source_region=r, dtype='NUMBER', lov='EMPLOYEES', null_text='', seq=70, new_line=False, cond=mgr)
+    p.item(r, 'P6002_SOLUTION', label='الحل', display='TEXTAREA', source='SOLUTION', source_region=r, seq=80, cond=mgr)
+    p.item(r, 'P6002_CLOSED_DATE', label='تاريخ الإغلاق', display='DISPLAY', source='CLOSED_DATE', source_region=r,
+           dtype='DATE', seq=90, cond=('ITEM_IS_NOT_NULL', 'P6002_REQUEST_ID'))
+    # read-only summary for the requester
+    info = ('EXPRESSION', ":P6002_REQUEST_ID is not null and MOINFO_HD.IS_MANAGER = 'N'", 'PLSQL')
+    p.item(r, 'P6002_INFO_STATUS', label='الحالة', display='DISPLAY', seq=100, cond=info)
+    p.item(r, 'P6002_INFO_ASSIGNED', label='الفني المتابع', display='DISPLAY', seq=110, new_line=False, cond=info)
+    p.item(r, 'P6002_INFO_SOLUTION', label='الحل', display='DISPLAY', seq=120, cond=info)
+    p.plsql_process('Load request info', """for x in (select STATUS_AR, ASSIGNED_AR, SOLUTION from MOINFO_HD_V_REQUESTS
+           where REQUEST_ID = :P6002_REQUEST_ID) loop
+    :P6002_INFO_STATUS := x.STATUS_AR;
+    :P6002_INFO_ASSIGNED := x.ASSIGNED_AR;
+    :P6002_INFO_SOLUTION := x.SOLUTION;
+end loop;""", point='BEFORE_HEADER', seq=20, cond=('ITEM_IS_NOT_NULL', 'P6002_REQUEST_ID'))
+    p.validation('Requester known', 'EXPRESSION',
+                 'nvl(:P6002_REQUESTER_EMPLOYEE_ID, MOINFO_HR.MY_EMPLOYEE_ID) is not null',
+                 'حدد صاحب الطلب (حسابك غير مرتبط بموظف)', seq=10, expr2='PLSQL')
+    p.button(r, 'CANCEL', 'إلغاء', action='REDIRECT_PAGE', position='CLOSE', seq=10,
+             redirect='f?p=&APP_ID.:6001:&SESSION.::&DEBUG.:::', exec_val=False)
+    p.button(r, 'DELETE', 'حذف', position='DELETE', seq=20, cond_type='EXPRESSION',
+             cond_item=":P6002_REQUEST_ID is not null and " + HD_MGR, cond_lang='PLSQL',
+             db_action='DELETE', confirm='هل تريد حذف هذا الطلب؟', exec_val=False)
+    p.button(r, 'SAVE', 'حفظ التعديلات', position='CHANGE', hot=True, seq=30, cond_item='P6002_REQUEST_ID',
+             cond_type='ITEM_IS_NOT_NULL', db_action='UPDATE')
+    p.button(r, 'CREATE', 'إرسال الطلب', position='CREATE', hot=True, seq=40, cond_item='P6002_REQUEST_ID',
+             cond_type='ITEM_IS_NULL', db_action='INSERT')
+    p.plsql_process('Default requester', """if :P6002_REQUEST_ID is null and :P6002_REQUESTER_EMPLOYEE_ID is null then
+    :P6002_REQUESTER_EMPLOYEE_ID := MOINFO_HR.MY_EMPLOYEE_ID;
+end if;""", seq=15, cond=('REQUEST_EQUALS_CONDITION', 'CREATE'))
+    p.form_processes(r, 'Request', dml_cond=DML, success='تم حفظ الطلب')
+    # follow-up notes
+    nr = p.static_region('إضافة متابعة', None, seq=20, cond=('ITEM_IS_NOT_NULL', 'P6002_REQUEST_ID'))
+    note = p.item(nr, 'P6002_NOTE_TEXT', label='ملاحظة المتابعة', display='TEXTAREA', seq=10)
+    p.item(nr, 'P6002_NOTE_STATUS_ID', label='تغيير الحالة إلى', display='SELECT', lov='LK_HD_REQUEST_STATUS',
+           null_text='- بدون تغيير -', seq=20, new_line=False, cond=mgr)
+    add = p.button(nr, 'ADD_NOTE', 'إضافة المتابعة', position='NEXT', hot=True, seq=10)
+    p.validation('Note required', 'ITEM_NOT_NULL', 'P6002_NOTE_TEXT', 'اكتب نص المتابعة', item=note, seq=40, when_button=add)
+    p.plsql_process('Add note', """MOINFO_HD.ADD_NOTE(:P6002_REQUEST_ID, :P6002_NOTE_TEXT,
+                  case when MOINFO_HD.IS_MANAGER = 'Y' then :P6002_NOTE_STATUS_ID end);
+:P6002_NOTE_TEXT := null;
+:P6002_NOTE_STATUS_ID := null;""", seq=30, when_button=add, success='أُضيفت المتابعة')
+    p.ir_region('سجل المتابعة', """select NOTE_ID, to_char(cast(CREATED_AT as date), 'DD/MM/YYYY HH24:MI') as CREATED_AT_TXT,
+       CREATED_BY_NAME, NOTE_TEXT, STATUS_AR
+  from MOINFO_HD_V_REQUEST_NOTES
+ where REQUEST_ID = :P6002_REQUEST_ID
+ order by CREATED_AT desc""",
+        [('NOTE_ID', None, 'NUMBER'), ('CREATED_AT_TXT', 'الوقت', 'STRING'), ('CREATED_BY_NAME', 'بواسطة', 'STRING'),
+         ('NOTE_TEXT', 'المتابعة', 'STRING'), ('STATUS_AR', 'الحالة الجديدة', 'STRING')],
+        seq=30, cond=('ITEM_IS_NOT_NULL', 'P6002_REQUEST_ID'))
+    p.branch(6002, seq=50, items=('P6002_REQUEST_ID', '&P6002_REQUEST_ID.'), when_button=add)
+    p.branch(6001, seq=100)
+    pages.append(p)
+
+    # 6003 devices
+    dev_cols = [('DEVICE_ID', None, 'NUMBER'), ('SERIAL_NO', 'الرقم التسلسلي', 'STRING'),
+                ('SERVICE_TAG', 'Service Tag', 'STRING'), ('DEVICE_NAME', 'اسم الجهاز', 'STRING'),
+                ('PRODUCT_TYPE_AR', 'النوع', 'STRING'), ('BRAND_NAME', 'الماركة', 'STRING'),
+                ('MODEL_NAME', 'الموديل', 'STRING'), ('STATUS_AR', 'الحالة', 'STRING'),
+                ('CURRENT_EMPLOYEE_AR', 'المستلم', 'STRING'), ('CURRENT_UNIT_AR', 'الجهة', 'STRING'),
+                ('SUPPLIER_AR', 'المورد', 'STRING'), ('PO_NO', 'أمر الشراء', 'STRING'),
+                ('WARRANTY_END', 'نهاية الضمان', 'DATE'), ('WARRANTY_STATE_AR', 'الضمان', 'STRING'),
+                ('PARTS_COUNT', 'قطع الغيار', 'NUMBER'), ('REQUESTS_COUNT', 'طلبات الدعم', 'NUMBER')]
+    p = Page(6003, 'الأجهزة', authz='HD_MANAGER', alias='HD-DEVICES')
+    reg = p.ir_region('الأجهزة', """select DEVICE_ID, SERIAL_NO, SERVICE_TAG, DEVICE_NAME, PRODUCT_TYPE_AR, BRAND_NAME, MODEL_NAME,
+       STATUS_AR, CURRENT_EMPLOYEE_AR, CURRENT_UNIT_AR, SUPPLIER_AR, PO_NO, WARRANTY_END, WARRANTY_STATE_AR,
+       PARTS_COUNT, REQUESTS_COUNT
+  from MOINFO_HD_V_DEVICES
+ where IS_ACTIVE = 'Y'
+ order by SERIAL_NO""", dev_cols, pk='DEVICE_ID', link_page=6004, link_item='P6004_DEVICE_ID')
+    p.button(reg, 'CREATE', 'جهاز جديد', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:6004:&SESSION.::&DEBUG.:6004::', icon='fa-plus')
+    pages.append(p)
+
+    # 6004 device form
+    p = Page(6004, 'جهاز', authz='HD_MANAGER', alias='HD-DEVICE')
+    r = p.form_region('جهاز', 'MOINFO_HD_DEVICES')
+    p.item(r, 'P6004_DEVICE_ID', display='HIDDEN', source='DEVICE_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
+    p.item(r, 'P6004_SERIAL_NO', label='الرقم التسلسلي', source='SERIAL_NO', source_region=r, required=True, maxlen=100, seq=10)
+    p.item(r, 'P6004_SERVICE_TAG', label='Service Tag', source='SERVICE_TAG', source_region=r, maxlen=100, seq=20,
+           new_line=False)
+    p.item(r, 'P6004_DEVICE_NAME', label='اسم الجهاز', source='DEVICE_NAME', source_region=r, maxlen=150, seq=30,
+           new_line=False)
+    p.item(r, 'P6004_MODEL_ID', label='الموديل', display='POPUP', source='MODEL_ID', source_region=r, dtype='NUMBER',
+           lov='CAT_MODELS', null_text='', seq=40)
+    p.item(r, 'P6004_STATUS_ID', label='الحالة', display='SELECT', source='STATUS_ID', source_region=r, dtype='NUMBER',
+           lov='LK_HD_DEVICE_STATUS', required=True, seq=50, new_line=False,
+           default_expr="MOINFO_HD.LOOKUP_ID('HD_DEVICE_STATUS', 'IN_STOCK')",
+           help='التسليم والاسترجاع يغيّران الحالة تلقائيًا')
+    p.item(r, 'P6004_SUPPLIER_ID', label='المورد', display='SELECT', source='SUPPLIER_ID', source_region=r, dtype='NUMBER',
+           lov='CAT_SUPPLIERS', null_text='- -', seq=60)
+    p.item(r, 'P6004_PO_ID', label='أمر الشراء', display='SELECT', source='PO_ID', source_region=r, dtype='NUMBER',
+           lov='HD_PURCHASE_ORDERS', null_text='- -', seq=70, new_line=False)
+    p.item(r, 'P6004_WARRANTY_TYPE_ID', label='نوع الضمان', display='SELECT', source='WARRANTY_TYPE_ID', source_region=r,
+           dtype='NUMBER', lov='CAT_WARRANTY_TYPES', null_text='- -', seq=80)
+    p.item(r, 'P6004_WARRANTY_START', label='بداية الضمان', display='DATE', source='WARRANTY_START', source_region=r,
+           dtype='DATE', seq=90, new_line=False)
+    p.item(r, 'P6004_WARRANTY_END', label='نهاية الضمان', display='DATE', source='WARRANTY_END', source_region=r,
+           dtype='DATE', seq=100, new_line=False, help='اتركه فارغًا ليُحسب من نوع الضمان وتاريخ البداية')
+    p.item(r, 'P6004_HOLDER', label='المستلم الحالي', display='DISPLAY', seq=110,
+           cond=('ITEM_IS_NOT_NULL', 'P6004_DEVICE_ID'))
+    p.item(r, 'P6004_REMARKS', label='ملاحظات', display='TEXTAREA', source='REMARKS', source_region=r, seq=120)
+    p.item(r, 'P6004_IS_ACTIVE', label='نشط', display='YESNO', source='IS_ACTIVE', source_region=r, default='Y', seq=130)
+    p.plsql_process('Load holder', """for x in (select CURRENT_EMPLOYEE_AR, CURRENT_UNIT_AR from MOINFO_HD_V_DEVICES
+           where DEVICE_ID = :P6004_DEVICE_ID) loop
+    :P6004_HOLDER := nvl(x.CURRENT_EMPLOYEE_AR || nvl2(x.CURRENT_UNIT_AR, ' - ' || x.CURRENT_UNIT_AR, ''), 'في المخزن');
+end loop;""", point='BEFORE_HEADER', seq=20, cond=('ITEM_IS_NOT_NULL', 'P6004_DEVICE_ID'))
+    p.validation('Warranty dates', 'EXPRESSION',
+                 ":P6004_WARRANTY_END is null or :P6004_WARRANTY_START is null or "
+                 "to_date(:P6004_WARRANTY_END, 'DD/MM/YYYY') >= to_date(:P6004_WARRANTY_START, 'DD/MM/YYYY')",
+                 'نهاية الضمان يجب ألا تسبق بدايته', seq=10, expr2='PLSQL')
+    p.button(r, 'CANCEL', 'إلغاء', action='REDIRECT_PAGE', position='CLOSE', seq=10,
+             redirect='f?p=&APP_ID.:6003:&SESSION.::&DEBUG.:::', exec_val=False)
+    p.button(r, 'DELETE', 'حذف', position='DELETE', seq=20, cond_item='P6004_DEVICE_ID', cond_type='ITEM_IS_NOT_NULL',
+             db_action='DELETE', confirm='هل تريد حذف هذا الجهاز وسجل تسليمه وقطع غياره؟', exec_val=False)
+    p.button(r, 'SAVE', 'حفظ التعديلات', position='CHANGE', hot=True, seq=30, cond_item='P6004_DEVICE_ID',
+             cond_type='ITEM_IS_NOT_NULL', db_action='UPDATE')
+    p.button(r, 'CREATE', 'إضافة', position='CREATE', hot=True, seq=40, cond_item='P6004_DEVICE_ID',
+             cond_type='ITEM_IS_NULL', db_action='INSERT')
+    p.form_processes(r, 'Device', dml_cond=DML)
+    # assign / return
+    ar = p.static_region('تسليم الجهاز', None, seq=20, cond=('ITEM_IS_NOT_NULL', 'P6004_DEVICE_ID'))
+    emp = p.item(ar, 'P6004_ASSIGN_EMPLOYEE_ID', label='تسليم إلى الموظف', display='POPUP', dtype='NUMBER',
+                 lov='EMPLOYEES', null_text='', seq=10)
+    p.item(ar, 'P6004_ASSIGN_UNIT_ID', label='أو إلى الجهة', display='POPUP', dtype='NUMBER', lov='UNITS', null_text='',
+           seq=20, new_line=False, help='إن تُركت فارغة تؤخذ جهة الموظف')
+    p.item(ar, 'P6004_ASSIGN_DATE', label='التاريخ', display='DATE', dtype='DATE', seq=30, new_line=False,
+           default_expr="to_char(sysdate, 'DD/MM/YYYY')")
+    p.item(ar, 'P6004_ASSIGN_REMARKS', label='ملاحظات التسليم', seq=40, maxlen=1000)
+    assign = p.button(ar, 'ASSIGN', 'تسليم', position='NEXT', hot=True, seq=10, icon='fa-sign-out')
+    ret = p.button(ar, 'RETURN', 'استرجاع إلى المخزن', position='NEXT', seq=20, icon='fa-sign-in',
+                   cond_type='EXISTS', exec_val=False,
+                   cond_item='select 1 from MOINFO_HD_ASSIGNMENTS where DEVICE_ID = :P6004_DEVICE_ID and RETURN_DATE is null',
+                   confirm='استرجاع الجهاز إلى المخزن؟')
+    p.validation('Assign target', 'EXPRESSION',
+                 ':P6004_ASSIGN_EMPLOYEE_ID is not null or :P6004_ASSIGN_UNIT_ID is not null',
+                 'اختر الموظف أو الجهة', item=emp, seq=40, expr2='PLSQL', when_button=assign)
+    p.plsql_process('Assign device', """MOINFO_HD.ASSIGN_DEVICE(:P6004_DEVICE_ID, :P6004_ASSIGN_EMPLOYEE_ID, :P6004_ASSIGN_UNIT_ID,
+                         nvl(to_date(:P6004_ASSIGN_DATE, 'DD/MM/YYYY'), trunc(sysdate)), :P6004_ASSIGN_REMARKS);
+:P6004_ASSIGN_EMPLOYEE_ID := null;
+:P6004_ASSIGN_UNIT_ID := null;
+:P6004_ASSIGN_REMARKS := null;""", seq=30, when_button=assign, success='تم تسليم الجهاز')
+    p.plsql_process('Return device', """MOINFO_HD.RETURN_DEVICE(:P6004_DEVICE_ID,
+                         nvl(to_date(:P6004_ASSIGN_DATE, 'DD/MM/YYYY'), trunc(sysdate)), :P6004_ASSIGN_REMARKS);
+:P6004_ASSIGN_REMARKS := null;""", seq=40, when_button=ret, success='تم استرجاع الجهاز')
+    p.ir_region('سجل التسليم', """select ASSIGNMENT_ID, EMPLOYEE_AR, EMPLOYEE_NO, UNIT_AR, ASSIGNED_DATE, RETURN_DATE, DAYS_HELD,
+       case IS_CURRENT when 'Y' then 'الحالي' end as CURRENT_AR, REMARKS
+  from MOINFO_HD_V_ASSIGNMENTS
+ where DEVICE_ID = :P6004_DEVICE_ID
+ order by ASSIGNED_DATE desc, ASSIGNMENT_ID desc""",
+        [('ASSIGNMENT_ID', None, 'NUMBER'), ('EMPLOYEE_AR', 'الموظف', 'STRING'), ('EMPLOYEE_NO', 'الرقم الوظيفي', 'STRING'),
+         ('UNIT_AR', 'الجهة', 'STRING'), ('ASSIGNED_DATE', 'تاريخ التسليم', 'DATE'),
+         ('RETURN_DATE', 'تاريخ الاسترجاع', 'DATE'), ('DAYS_HELD', 'المدة (أيام)', 'NUMBER'),
+         ('CURRENT_AR', 'الحالي', 'STRING'), ('REMARKS', 'ملاحظات', 'STRING')],
+        seq=30, cond=('ITEM_IS_NOT_NULL', 'P6004_DEVICE_ID'))
+    child_ir(p, 'قطع الغيار', """select p.PART_ID, p.PART_NAME, p.PART_SN, s.NAME_AR as SUPPLIER_AR, p.WARRANTY_END,
+       p.DELIVERY_DATE, case p.IS_DELIVERED when 'Y' then 'نعم' else 'لا' end as DELIVERED_AR, p.REMARKS
+  from MOINFO_HD_SPARE_PARTS p
+  left join MOINFO_CAT_SUPPLIERS s on s.SUPPLIER_ID = p.SUPPLIER_ID
+ where p.DEVICE_ID = :P6004_DEVICE_ID""",
+        [('PART_ID', None, 'NUMBER'), ('PART_NAME', 'القطعة', 'STRING'), ('PART_SN', 'الرقم التسلسلي', 'STRING'),
+         ('SUPPLIER_AR', 'المورد', 'STRING'), ('WARRANTY_END', 'نهاية الضمان', 'DATE'),
+         ('DELIVERY_DATE', 'تاريخ التوريد', 'DATE'), ('DELIVERED_AR', 'تم التوريد', 'STRING'), ('REMARKS', 'ملاحظات', 'STRING')],
+        'PART_ID', 6005, 'P6005_PART_ID', 'P6004_DEVICE_ID', 6005, 'P6005_DEVICE_ID', 'إضافة قطعة', seq=40)
+    p.ir_region('طلبات الدعم على الجهاز', req_sel + """
+ where r.DEVICE_ID = :P6004_DEVICE_ID
+ order by r.REQUEST_DATE desc""", req_cols, pk='REQUEST_ID', link_page=6002, link_item='P6002_REQUEST_ID', seq=50,
+        cond=('ITEM_IS_NOT_NULL', 'P6004_DEVICE_ID'))
+    p.branch(6004, seq=50, items=('P6004_DEVICE_ID', '&P6004_DEVICE_ID.'), when_button=assign)
+    p.branch(6004, seq=60, items=('P6004_DEVICE_ID', '&P6004_DEVICE_ID.'), when_button=ret)
+    p.branch(6003, seq=100)
+    pages.append(p)
+
+    # 6005 spare part
+    pages.append(child_form(6005, 'قطعة غيار', 'MOINFO_HD_SPARE_PARTS', 'PART_ID', 'DEVICE_ID', 6004, 'P6004_DEVICE_ID', [
+        dict(col='PART_NAME', label='القطعة', required=True, maxlen=200),
+        dict(col='PART_SN', label='الرقم التسلسلي', maxlen=100),
+        dict(col='SUPPLIER_ID', label='المورد', display='SELECT', lov='CAT_SUPPLIERS', null_text='- -', dtype='NUMBER'),
+        dict(col='WARRANTY_TYPE_ID', label='نوع الضمان', display='SELECT', lov='CAT_WARRANTY_TYPES', null_text='- -',
+             dtype='NUMBER'),
+        dict(col='WARRANTY_START', label='بداية الضمان', display='DATE', dtype='DATE'),
+        dict(col='WARRANTY_END', label='نهاية الضمان', display='DATE', dtype='DATE'),
+        dict(col='DELIVERY_DATE', label='تاريخ التوريد', display='DATE', dtype='DATE'),
+        dict(col='IS_DELIVERED', label='تم التوريد', display='YESNO', default='N'),
+        dict(col='REMARKS', label='ملاحظات', display='TEXTAREA'),
+    ], 'HD_MANAGER'))
+
+    # 6006/6007 purchase orders
+    pages += crud(6006, 6007, 'أوامر الشراء', 'أمر شراء', 'MOINFO_HD_PURCHASE_ORDERS', 'PO_ID',
+        f"""select po.PO_ID, po.PO_NO, po.PO_NAME, po.PO_DATE, s.NAME_AR as SUPPLIER_AR,
+       (select count(*) from MOINFO_HD_DEVICES d where d.PO_ID = po.PO_ID) as DEVICES_COUNT,
+       {YN.format(c='po.IS_ACTIVE')} as IS_ACTIVE_AR
+  from MOINFO_HD_PURCHASE_ORDERS po
+  left join MOINFO_CAT_SUPPLIERS s on s.SUPPLIER_ID = po.SUPPLIER_ID""",
+        [('PO_ID', None, 'NUMBER'), ('PO_NO', 'رقم الأمر', 'STRING'), ('PO_NAME', 'الوصف', 'STRING'),
+         ('PO_DATE', 'التاريخ', 'DATE'), ('SUPPLIER_AR', 'المورد', 'STRING'), ('DEVICES_COUNT', 'عدد الأجهزة', 'NUMBER'),
+         ('IS_ACTIVE_AR', 'نشط', 'STRING')],
+        [dict(col='PO_NO', label='رقم أمر الشراء', required=True, maxlen=100),
+         dict(col='PO_DATE', label='التاريخ', display='DATE', dtype='DATE', new_line=False),
+         dict(col='PO_NAME', label='الوصف', maxlen=300),
+         dict(col='SUPPLIER_ID', label='المورد', display='SELECT', lov='CAT_SUPPLIERS', null_text='- -', dtype='NUMBER'),
+         dict(col='REMARKS', label='ملاحظات', display='TEXTAREA'),
+         dict(col='IS_ACTIVE', label='نشط', display='YESNO', default='Y')],
+        'HD_MANAGER')
+
+    # 6008 warranty
+    p = Page(6008, 'الضمان', authz='HD_MANAGER', alias='HD-WARRANTY')
+    p.ir_region('الأجهزة والقطع التي ينتهي ضمانها قريبًا أو انتهى', """select DEVICE_ID, ITEM_KIND_AR, SERIAL_NO, ITEM_NAME, SUPPLIER_AR, WARRANTY_END, DAYS_LEFT,
+       case when DAYS_LEFT < 0 then 'منتهي' else 'ينتهي قريبًا' end as STATE_AR, CURRENT_EMPLOYEE_AR
+  from MOINFO_HD_V_WARRANTY_EXPIRING
+ order by WARRANTY_END""",
+        [('DEVICE_ID', None, 'NUMBER'), ('ITEM_KIND_AR', 'النوع', 'STRING'), ('SERIAL_NO', 'الرقم التسلسلي', 'STRING'),
+         ('ITEM_NAME', 'الصنف', 'STRING'), ('SUPPLIER_AR', 'المورد', 'STRING'), ('WARRANTY_END', 'نهاية الضمان', 'DATE'),
+         ('DAYS_LEFT', 'الأيام المتبقية', 'NUMBER'), ('STATE_AR', 'الحالة', 'STRING'),
+         ('CURRENT_EMPLOYEE_AR', 'المستلم', 'STRING')],
+        pk='DEVICE_ID', link_page=6004, link_item='P6004_DEVICE_ID')
+    pages.append(p)
+
+    # 6009 my devices
+    p = Page(6009, 'أجهزتي', authz='HAS_EMPLOYEE', alias='HD-MY-DEVICES')
+    reg = p.ir_region('الأجهزة المسلّمة لي', """select DEVICE_ID, SERIAL_NO, SERVICE_TAG, DEVICE_NAME, PRODUCT_TYPE_AR, BRAND_NAME, MODEL_NAME,
+       WARRANTY_END, WARRANTY_STATE_AR, REQUESTS_COUNT
+  from MOINFO_HD_V_DEVICES
+ where CURRENT_EMPLOYEE_ID = MOINFO_HR.MY_EMPLOYEE_ID
+ order by SERIAL_NO""",
+        [('DEVICE_ID', None, 'NUMBER'), ('SERIAL_NO', 'الرقم التسلسلي', 'STRING'), ('SERVICE_TAG', 'Service Tag', 'STRING'),
+         ('DEVICE_NAME', 'اسم الجهاز', 'STRING'), ('PRODUCT_TYPE_AR', 'النوع', 'STRING'), ('BRAND_NAME', 'الماركة', 'STRING'),
+         ('MODEL_NAME', 'الموديل', 'STRING'), ('WARRANTY_END', 'نهاية الضمان', 'DATE'),
+         ('WARRANTY_STATE_AR', 'الضمان', 'STRING'), ('REQUESTS_COUNT', 'طلبات الدعم', 'NUMBER')])
+    p.button(reg, 'CREATE', 'طلب دعم جديد', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:6002:&SESSION.::&DEBUG.:6002::', icon='fa-life-ring')
+    p.ir_region('سجل الأجهزة التي استلمتها', """select ASSIGNMENT_ID, SERIAL_NO, DEVICE_NAME, ASSIGNED_DATE, RETURN_DATE, DAYS_HELD, REMARKS
+  from MOINFO_HD_V_ASSIGNMENTS
+ where EMPLOYEE_ID = MOINFO_HR.MY_EMPLOYEE_ID
+ order by ASSIGNED_DATE desc""",
+        [('ASSIGNMENT_ID', None, 'NUMBER'), ('SERIAL_NO', 'الرقم التسلسلي', 'STRING'), ('DEVICE_NAME', 'الجهاز', 'STRING'),
+         ('ASSIGNED_DATE', 'تاريخ الاستلام', 'DATE'), ('RETURN_DATE', 'تاريخ الإرجاع', 'DATE'),
+         ('DAYS_HELD', 'المدة (أيام)', 'NUMBER'), ('REMARKS', 'ملاحظات', 'STRING')], seq=20)
+    pages.append(p)
+    return pages
+
 def all_pages():
-    return hr_pages() + evt_pages() + med_pages() + tsk_pages() + att_pages()
+    return hr_pages() + evt_pages() + med_pages() + tsk_pages() + att_pages() + hd_pages() + cat_pages()
+
