@@ -56,6 +56,7 @@ wwv_imp_workspace.create_flow(
 ,p_bookmark_checksum_function=>'SH512'
 ,p_compatibility_mode=>'26.1'
 ,p_flow_language=>'ar'
+,p_auto_time_zone=>'Y'
 ,p_flow_language_derived_from=>'FLOW_PRIMARY_LANGUAGE'
 ,p_allow_feedback_yn=>'N'
 ,p_date_format=>'DD/MM/YYYY'
@@ -478,7 +479,7 @@ p70.ir_region('سجل التدقيق', """select a.AUDIT_ID,
        dbms_lob.substr(a.OLD_DATA, 1500, 1) as OLD_DATA,
        dbms_lob.substr(a.NEW_DATA, 1500, 1) as NEW_DATA
   from MOINFO_AUDIT_LOG a
- order by a.AUDIT_ID desc""",
+ order by a.CHANGED_AT desc, a.AUDIT_ID desc""",
     [('AUDIT_ID', 'الرقم', 'NUMBER'), ('CHANGED_AT_TXT', 'الوقت', 'STRING'), ('CHANGED_BY', 'المستخدم', 'STRING'),
      ('TABLE_NAME', 'الجدول', 'STRING'), ('ROW_PK', 'رقم السجل', 'STRING'), ('ACTION_AR', 'العملية', 'STRING'),
      ('OLD_DATA', 'قبل', 'STRING'), ('NEW_DATA', 'بعد', 'STRING')])
@@ -499,7 +500,7 @@ p71.ir_region('سجل الدخول', """select h.LOGIN_ID,
        end as REASON_AR,
        h.IP_ADDRESS
   from MOINFO_LOGIN_HISTORY h
- order by h.LOGIN_ID desc""",
+ order by h.LOGIN_AT desc, h.LOGIN_ID desc""",
     [('LOGIN_ID', 'الرقم', 'NUMBER'), ('LOGIN_AT_TXT', 'وقت الدخول', 'STRING'), ('LOGOUT_AT_TXT', 'وقت الخروج', 'STRING'),
      ('USERNAME', 'المستخدم', 'STRING'), ('RESULT_AR', 'النتيجة', 'STRING'), ('REASON_AR', 'السبب', 'STRING'),
      ('IP_ADDRESS', 'عنوان IP', 'STRING')])

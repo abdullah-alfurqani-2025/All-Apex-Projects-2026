@@ -35,6 +35,7 @@ wwv_imp_workspace.create_flow(
 ,p_bookmark_checksum_function=>'SH512'
 ,p_compatibility_mode=>'26.1'
 ,p_flow_language=>'ar'
+,p_auto_time_zone=>'Y'
 ,p_flow_language_derived_from=>'FLOW_PRIMARY_LANGUAGE'
 ,p_allow_feedback_yn=>'N'
 ,p_date_format=>'DD/MM/YYYY'
@@ -5528,7 +5529,7 @@ unistr('       case a.ACTION when ''I'' then ''\0625\0636\0627\0641\0629'' when 
 '       dbms_lob.substr(a.OLD_DATA, 1500, 1) as OLD_DATA,',
 '       dbms_lob.substr(a.NEW_DATA, 1500, 1) as NEW_DATA',
 '  from MOINFO_AUDIT_LOG a',
-' order by a.AUDIT_ID desc'))
+' order by a.CHANGED_AT desc, a.AUDIT_ID desc'))
 ,p_plug_source_type=>'NATIVE_IR'
 ,p_plug_query_headings_type=>'COLON_DELMITED_LIST'
 ,p_prn_content_disposition=>'ATTACHMENT'
@@ -5682,7 +5683,7 @@ unistr('            when ''WRONG_PASSWORD'' then ''\0643\0644\0645\0629 \0645\06
 '       end as REASON_AR,',
 '       h.IP_ADDRESS',
 '  from MOINFO_LOGIN_HISTORY h',
-' order by h.LOGIN_ID desc'))
+' order by h.LOGIN_AT desc, h.LOGIN_ID desc'))
 ,p_plug_source_type=>'NATIVE_IR'
 ,p_plug_query_headings_type=>'COLON_DELMITED_LIST'
 ,p_prn_content_disposition=>'ATTACHMENT'
