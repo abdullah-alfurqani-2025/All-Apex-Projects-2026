@@ -1183,7 +1183,7 @@ BEGIN
     ----------------------------------------------------------------------------
     -- مستخدمو التجربة (إن وُضعت كلمة مرور)
     ----------------------------------------------------------------------------
-    IF c_password <> 'ضع كلمة المرور هنا' THEN
+    IF MOINFO_AUTH.VALIDATE_PASSWORD_RULES(c_password) IS NULL THEN
         add_user('DEMO_HR', 'سالم الحارثي (تجربة)', 1, 'HR');
         grant_mod('HR', 'MANAGER', 'ALL');
         grant_mod('EVT', 'MANAGER', 'ALL');
@@ -1229,8 +1229,8 @@ BEGIN
     IF NOT l_can_move THEN
         DBMS_OUTPUT.PUT_LINE('تنبيه: لم تُسجَّل حركات المخزن لأن اسم المستخدم الحالي غير متاح في هذه الجلسة');
     END IF;
-    IF c_password = 'ضع كلمة المرور هنا' THEN
-        DBMS_OUTPUT.PUT_LINE('لم يُنشأ مستخدمو التجربة (لم تُحدَّد كلمة مرور)');
+    IF MOINFO_AUTH.VALIDATE_PASSWORD_RULES(c_password) IS NOT NULL THEN
+        DBMS_OUTPUT.PUT_LINE('لم يُنشأ مستخدمو التجربة: كلمة المرور غير محددة أو لا تحقق الشروط');
     END IF;
 EXCEPTION
     WHEN OTHERS THEN
