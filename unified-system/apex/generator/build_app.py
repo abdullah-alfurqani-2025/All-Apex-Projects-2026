@@ -545,13 +545,15 @@ prompt  ...done
 open(OUT, 'w', encoding='utf-8').write('\n'.join(parts))
 print(OUT, sum(len(x.encode('utf-8')) for x in parts), 'bytes,', len(pages), 'pages')
 
-# second script: module pages (component install into the existing application)
-OUT2 = OUT.replace('.sql', '_modules.sql')
-m = [f"""prompt --application/set_environment
+# module scripts: module pages (component install into the existing application),
+# split so that each file stays under the 500KB limit of SQL Scripts
+LIMIT = 470_000
+def mod_header(n):
+    return f"""prompt --application/set_environment
 set define off verify off feedback off
 whenever sqlerror exit sql.sqlcode rollback
 --------------------------------------------------------------------------------
--- MOINFO - النظام الموحد: صفحات الوحدات (يُشغَّل بعد f145032.sql)
+-- MOINFO - النظام الموحد: صفحات الوحدات، الملف {n} (يُشغَّل بعد f145032.sql)
 --------------------------------------------------------------------------------
 begin
 wwv_flow_imp.import_begin (
@@ -564,15 +566,25 @@ wwv_flow_imp.import_begin (
 );
 end;
 /
-"""]
+"""
+chunks = [[]]
+size = 0
 for p in mod_pages:
-    m.append(f"""prompt --application/pages/delete_{p.pid:05d}
+    body = f"""prompt --application/pages/delete_{p.pid:05d}
 begin
 wwv_flow_imp_page.remove_page (p_flow_id=>wwv_flow.g_flow_id, p_page_id=>{p.pid});
 end;
 /
-""")
-    m.append(p.render())
-m.append(parts[-1])
-open(OUT2, 'w', encoding='utf-8').write('\n'.join(m))
-print(OUT2, sum(len(x.encode('utf-8')) for x in m), 'bytes,', len(mod_pages), 'pages')
+""" + "\n" + p.render()
+    b = len(body.encode('utf-8'))
+    if chunks[-1] and size + b > LIMIT:
+        chunks.append([])
+        size = 0
+    chunks[-1].append((p, body))
+    size += b
+for n, ch in enumerate(chunks, 1):
+    out = OUT.replace('.sql', '_modules.sql' if n == 1 else f'_modules{n}.sql')
+    m = [mod_header(n)] + [b for _, b in ch] + [parts[-1]]
+    open(out, 'w', encoding='utf-8').write('\n'.join(m))
+    print(out, sum(len(x.encode('utf-8')) for x in m), 'bytes,', len(ch), 'pages',
+          f'({ch[0][0].pid}-{ch[-1][0].pid})')

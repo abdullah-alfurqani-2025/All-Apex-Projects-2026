@@ -8,13 +8,15 @@ DML = 'CREATE,SAVE,DELETE'
 # ------------------------------------------------------------------------------
 def authorizations():
     calls = []
-    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD']:
+    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD', 'PRC']:
         calls.append(authorization(f'{code}_MANAGER', f"return MOINFO_SEC.HAS_ROLE('{code}', 'MANAGER');",
                                    'هذه الصفحة للمشرفين في الوحدة'))
     calls.append(authorization('CAT_MANAGER', """return MOINFO_SEC.IS_ADMIN
     or MOINFO_SEC.HAS_ROLE('HD', 'MANAGER')
     or MOINFO_SEC.HAS_ROLE('PRC', 'MANAGER')
     or MOINFO_SEC.HAS_ROLE('STD', 'MANAGER');""", 'الكتالوج المشترك لمشرفي الدعم الفني والمشتريات والمخزن'))
+    calls.append(authorization('PRC_PURCHASER', "return MOINFO_SEC.HAS_ROLE('PRC', 'ADMIN');",
+                               'هذه الصفحة لقسم المشتريات'))
     calls.append(authorization('HAS_EMPLOYEE', 'return MOINFO_HR.MY_EMPLOYEE_ID is not null;',
                                'حسابك غير مرتبط بموظف'))
     return calls
@@ -29,7 +31,7 @@ def lovs():
     out = []
     for t in ['HR_MARITAL_STATUS', 'HR_RELIGION', 'HR_APPOINTMENT_TYPE', 'HR_QUALIFICATION', 'HR_BANK',
               'HR_EMP_STATUS', 'EVT_TYPE', 'MED_EVENT', 'MED_EVENT_TYPE', 'TSK_STATUS', 'TSK_TYPE',
-              'TSK_CATEGORY', 'ATT_CATEGORY', 'HD_DEVICE_STATUS', 'HD_REQUEST_STATUS']:
+              'TSK_CATEGORY', 'ATT_CATEGORY', 'HD_DEVICE_STATUS', 'HD_REQUEST_STATUS', 'PRC_REQUEST_STATUS']:
         out.append(lookup_lov(t))
     out.append(lov('COUNTRIES', "select NAME_AR d, COUNTRY_ID r from MOINFO_COUNTRIES where IS_ACTIVE = 'Y' order by SORT_ORDER, NAME_AR"))
     out.append(lov('WILAYATS', """select g.NAME_AR || ' - ' || w.NAME_AR d, w.WILAYAT_ID r
@@ -56,6 +58,10 @@ def lovs():
  where IS_ACTIVE = 'Y'
    and (MOINFO_HD.IS_MANAGER = 'Y' or CURRENT_EMPLOYEE_ID = MOINFO_HR.MY_EMPLOYEE_ID)
  order by SERIAL_NO"""))
+    out.append(lov('PRC_MODELS_BY_BRAND', """select NAME d, MODEL_ID r from MOINFO_CAT_MODELS
+ where IS_ACTIVE = 'Y' and BRAND_ID = :P7003_BRAND_ID
+ order by NAME"""))
+    out.append(static_lov('PRC_ITEM_DECISION', [('معتمد', 'Y'), ('مرفوض', 'N')]))
     out.append(static_lov('MED_CREW_ROLE', [('مصور', 'PHOTOGRAPHER'), ('مونتاج', 'EDITOR'), ('مراسل', 'REPORTER')]))
     out.append(static_lov('TSK_PRIORITY', [('منخفضة', 'LOW'), ('عادية', 'NORMAL'), ('عالية', 'HIGH'), ('عاجلة', 'URGENT')]))
     return out
@@ -94,6 +100,12 @@ MODULE_MENU = [
         ('أوامر الشراء', 6006, '6006,6007', 'HD_MANAGER'),
         ('الضمان', 6008, '6008', 'HD_MANAGER'),
     ]),
+    ('PRC', 'المشتريات', 'fa-shopping-cart', [
+        ('طلبات الشراء', 7001, '7001,7002,7003', 'MOD_PRC'),
+        ('بانتظار الاعتماد', 7005, '7005', 'PRC_MANAGER'),
+        ('الشراء والاستلام', 7006, '7006', 'PRC_PURCHASER'),
+        ('الإحصائيات', 7007, '7007', 'MOD_PRC'),
+    ]),
     ('CAT', 'الكتالوج المشترك', 'fa-tags', [
         ('أنواع المنتجات', 100, '100,101', 'CAT_MANAGER'),
         ('الماركات', 102, '102,103', 'CAT_MANAGER'),
@@ -124,6 +136,7 @@ def home_cards():
         'TSK': 'المهام وسجل المتابعة والإحصائيات',
         'ATT': 'المناوبات والمحاضر ونماذج الخطابات',
         'HD': 'طلبات الدعم والأجهزة والتسليم والضمان',
+        'PRC': 'طلبات الشراء والاعتماد والشراء والاستلام',
         'CAT': 'الماركات والموديلات والموردون وأنواع الضمان',
     }
     out = [dict(text='بياناتي', page=1010, icon='fa-user-circle', authz='HAS_EMPLOYEE', desc='بياناتك الوظيفية والشخصية',
@@ -1093,6 +1106,253 @@ end loop;""", point='BEFORE_HEADER', seq=20, cond=('ITEM_IS_NOT_NULL', 'P6004_DE
     pages.append(p)
     return pages
 
+# ------------------------------------------------------------------------------
+# PRC (7000)
+# ------------------------------------------------------------------------------
+def prc_pages():
+    pages = []
+    req_cols = [('REQUEST_ID', None, 'NUMBER'), ('REQUEST_NO', 'رقم الطلب', 'STRING'), ('SUBJECT', 'الموضوع', 'STRING'),
+                ('REQUEST_DATE', 'التاريخ', 'DATE'), ('REQUESTER_AR', 'صاحب الطلب', 'STRING'), ('UNIT_AR', 'الجهة', 'STRING'),
+                ('STATUS_AR', 'الحالة', 'STRING'), ('ITEMS_COUNT', 'الأصناف', 'NUMBER'),
+                ('TOTAL_AMOUNT', 'الإجمالي', 'NUMBER'), ('APPROVED_AMOUNT', 'المعتمد', 'NUMBER'),
+                ('PO_NO', 'أمر الشراء', 'STRING'), ('PURCHASED_DATE', 'تاريخ الشراء', 'DATE'),
+                ('DELIVERED_DATE', 'تاريخ الاستلام', 'DATE')]
+    req_sel = """select REQUEST_ID, REQUEST_NO, SUBJECT, REQUEST_DATE, REQUESTER_AR, UNIT_AR, STATUS_AR, ITEMS_COUNT,
+       TOTAL_AMOUNT, APPROVED_AMOUNT, PO_NO, PURCHASED_DATE, DELIVERED_DATE
+  from MOINFO_PRC_V_REQUESTS"""
+
+    def list_page(pid, title, alias, authz, where, create=False):
+        p = Page(pid, title, authz=authz, alias=alias)
+        reg = p.ir_region(title, req_sel + "\n where IS_ACTIVE = 'Y'\n   and " + where + "\n order by REQUEST_DATE desc, REQUEST_ID desc",
+                          req_cols, pk='REQUEST_ID', link_page=7002, link_item='P7002_REQUEST_ID')
+        if create:
+            p.button(reg, 'CREATE', 'طلب شراء جديد', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+                     redirect='f?p=&APP_ID.:7002:&SESSION.::&DEBUG.:7002::', icon='fa-plus')
+        return p
+
+    pages.append(list_page(7001, 'طلبات الشراء', 'PRC-REQUESTS', 'MOD_PRC', "MOINFO_PRC.CAN_SEE(REQUEST_ID) = 'Y'", True))
+    pages.append(list_page(7005, 'بانتظار الاعتماد', 'PRC-PENDING', 'PRC_MANAGER',
+                           "STATUS_CODE = 'SUBMITTED' and MOINFO_PRC.CAN_DECIDE(REQUEST_ID) = 'Y'"))
+    pages.append(list_page(7006, 'الشراء والاستلام', 'PRC-PURCHASING', 'PRC_PURCHASER',
+                           "STATUS_CODE in ('APPROVED', 'PURCHASED')"))
+
+    # 7002 request
+    p = Page(7002, 'طلب شراء', authz='MOD_PRC', alias='PRC-REQUEST')
+    guard(p, ":P7002_REQUEST_ID is not null and MOINFO_PRC.CAN_SEE(:P7002_REQUEST_ID) = 'N'", 'لا تملك صلاحية على هذا الطلب')
+    r = p.form_region('طلب شراء', 'MOINFO_PRC_REQUESTS')
+    mgr = ('EXPRESSION', "MOINFO_SEC.HAS_ROLE('PRC', 'MANAGER')", 'PLSQL')
+    editable = ":P7002_REQUEST_ID is null or MOINFO_PRC.CAN_EDIT(:P7002_REQUEST_ID) = 'Y'"
+    p.item(r, 'P7002_REQUEST_ID', display='HIDDEN', source='REQUEST_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
+    p.item(r, 'P7002_REQUEST_NO', label='رقم الطلب', display='DISPLAY', source='REQUEST_NO', source_region=r, seq=5,
+           cond=('ITEM_IS_NOT_NULL', 'P7002_REQUEST_ID'))
+    p.item(r, 'P7002_STATUS_TXT', label='الحالة', display='DISPLAY', seq=6, new_line=False,
+           cond=('ITEM_IS_NOT_NULL', 'P7002_REQUEST_ID'))
+    p.item(r, 'P7002_SUBJECT', label='الموضوع', source='SUBJECT', source_region=r, required=True, maxlen=300, seq=10)
+    p.item(r, 'P7002_REQUEST_DATE', label='التاريخ', display='DATE', source='REQUEST_DATE', source_region=r, dtype='DATE',
+           seq=20, default_expr="to_char(sysdate, 'DD/MM/YYYY')")
+    p.item(r, 'P7002_REQUESTER_EMPLOYEE_ID', label='صاحب الطلب', display='POPUP', source='REQUESTER_EMPLOYEE_ID',
+           source_region=r, dtype='NUMBER', lov='EMPLOYEES', null_text='', seq=30, new_line=False, cond=mgr,
+           default_expr='MOINFO_HR.MY_EMPLOYEE_ID')
+    p.item(r, 'P7002_UNIT_ID', label='الجهة الطالبة', display='POPUP', source='UNIT_ID', source_region=r, dtype='NUMBER',
+           lov='UNITS', null_text='', seq=40, cond=mgr, help='إن تُركت فارغة تؤخذ جهة صاحب الطلب')
+    p.item(r, 'P7002_JUSTIFICATION', label='المبررات', display='TEXTAREA', source='JUSTIFICATION', source_region=r, seq=50)
+    p.item(r, 'P7002_REMARKS', label='ملاحظات', display='TEXTAREA', source='REMARKS', source_region=r, seq=60)
+    p.item(r, 'P7002_DECISION_TXT', label='القرار', display='DISPLAY', seq=70,
+           cond=('ITEM_IS_NOT_NULL', 'P7002_DECISION_TXT'))
+    p.item(r, 'P7002_PURCHASE_TXT', label='الشراء والاستلام', display='DISPLAY', seq=80, new_line=False,
+           cond=('ITEM_IS_NOT_NULL', 'P7002_PURCHASE_TXT'))
+    p.plsql_process('Load request info', """for x in (select STATUS_AR, STATUS_CODE, DECIDED_BY_NAME, DECIDED_AT, DECISION_REASON, PO_NO,
+                 PURCHASED_DATE, DELIVERED_DATE
+            from MOINFO_PRC_V_REQUESTS where REQUEST_ID = :P7002_REQUEST_ID) loop
+    :P7002_STATUS_TXT := x.STATUS_AR;
+    if x.DECIDED_AT is not null or x.DECISION_REASON is not null then
+        :P7002_DECISION_TXT := x.DECIDED_BY_NAME
+            || nvl2(x.DECIDED_AT, ' - ' || to_char(cast(x.DECIDED_AT as date), 'DD/MM/YYYY HH24:MI'), '')
+            || nvl2(x.DECISION_REASON, ': ' || x.DECISION_REASON, '');
+    end if;
+    if x.PURCHASED_DATE is not null then
+        :P7002_PURCHASE_TXT := 'الشراء ' || to_char(x.PURCHASED_DATE, 'DD/MM/YYYY')
+            || nvl2(x.PO_NO, ' (أمر ' || x.PO_NO || ')', '')
+            || nvl2(x.DELIVERED_DATE, ' - الاستلام ' || to_char(x.DELIVERED_DATE, 'DD/MM/YYYY'), '');
+    end if;
+end loop;""", point='BEFORE_HEADER', seq=20, cond=('ITEM_IS_NOT_NULL', 'P7002_REQUEST_ID'))
+    p.validation('Requester known', 'EXPRESSION',
+                 'nvl(:P7002_REQUESTER_EMPLOYEE_ID, MOINFO_HR.MY_EMPLOYEE_ID) is not null',
+                 'حدد صاحب الطلب (حسابك غير مرتبط بموظف)', seq=10, expr2='PLSQL')
+    p.plsql_process('Default requester', """if :P7002_REQUEST_ID is null and :P7002_REQUESTER_EMPLOYEE_ID is null then
+    :P7002_REQUESTER_EMPLOYEE_ID := MOINFO_HR.MY_EMPLOYEE_ID;
+end if;""", seq=15, cond=('REQUEST_EQUALS_CONDITION', 'CREATE'))
+    p.button(r, 'BACK', 'رجوع', action='REDIRECT_PAGE', position='CLOSE', seq=10,
+             redirect='f?p=&APP_ID.:7001:&SESSION.::&DEBUG.:::', exec_val=False)
+    delete = p.button(r, 'DELETE', 'حذف', position='DELETE', seq=20, cond_type='EXPRESSION',
+                      cond_item=":P7002_REQUEST_ID is not null and MOINFO_PRC.CAN_EDIT(:P7002_REQUEST_ID) = 'Y'",
+                      cond_lang='PLSQL', db_action='DELETE', confirm='هل تريد حذف هذا الطلب وأصنافه؟', exec_val=False)
+    p.button(r, 'SAVE', 'حفظ', position='CHANGE', seq=30, cond_type='EXPRESSION',
+             cond_item=":P7002_REQUEST_ID is not null and MOINFO_PRC.CAN_EDIT(:P7002_REQUEST_ID) = 'Y'", cond_lang='PLSQL',
+             db_action='UPDATE')
+    create = p.button(r, 'CREATE', 'إنشاء وإضافة الأصناف', position='CREATE', hot=True, seq=40, cond_item='P7002_REQUEST_ID',
+                      cond_type='ITEM_IS_NULL', db_action='INSERT')
+    p.form_processes(r, 'Request', dml_cond=DML, success='تم الحفظ')
+
+    # workflow actions
+    ar = p.static_region('الإجراءات', None, seq=15, cond=('ITEM_IS_NOT_NULL', 'P7002_REQUEST_ID'))
+    st = lambda codes: f"MOINFO_PRC.STATUS_CODE(:P7002_REQUEST_ID) in ({codes})"
+    decide = f"MOINFO_PRC.CAN_DECIDE(:P7002_REQUEST_ID) = 'Y'"
+    purch = "MOINFO_PRC.IS_PURCHASER = 'Y'"
+    st_open = st("'DRAFT','SUBMITTED','APPROVED'")
+    st_buy = st("'APPROVED','PURCHASED'")
+    st_appr = st("'APPROVED'")
+    st_purch = st("'PURCHASED'")
+    reason = p.item(ar, 'P7002_ACTION_REASON', label='السبب / الملاحظة', display='TEXTAREA', seq=10, height=2,
+                    cond=('EXPRESSION', f"{decide} or {st_open}", 'PLSQL'))
+    p.item(ar, 'P7002_ACTION_DATE', label='التاريخ', display='DATE', dtype='DATE', seq=20,
+           default_expr="to_char(sysdate, 'DD/MM/YYYY')",
+           cond=('EXPRESSION', f"{purch} and {st_buy}", 'PLSQL'))
+    p.item(ar, 'P7002_ACTION_PO_ID', label='أمر الشراء', display='SELECT', dtype='NUMBER', lov='HD_PURCHASE_ORDERS',
+           null_text='- -', seq=30, new_line=False,
+           cond=('EXPRESSION', f"{purch} and {st_appr}", 'PLSQL'))
+    btns = {}
+    def action(name, label, cond, seq, icon, confirm=None, hot=False, exec_val=False):
+        btns[name] = p.button(ar, name, label, position='NEXT', seq=seq, icon=icon, hot=hot, confirm=confirm,
+                              cond_type='EXPRESSION', cond_item=cond, cond_lang='PLSQL', exec_val=exec_val)
+        return btns[name]
+    action('SUBMIT', 'تقديم للاعتماد', f"MOINFO_PRC.CAN_EDIT(:P7002_REQUEST_ID) = 'Y'", 10, 'fa-send', hot=True,
+           confirm='تقديم الطلب للاعتماد؟ لن تتمكن من تعديل الأصناف بعدها')
+    action('APPROVE', 'اعتماد', decide, 20, 'fa-check', hot=True, confirm='اعتماد الطلب؟')
+    action('REJECT', 'رفض', decide, 30, 'fa-times', confirm='رفض الطلب؟', exec_val=True)
+    action('REOPEN', 'إعادة إلى مسودة', st("'REJECTED'"), 40, 'fa-undo')
+    action('PURCHASE', 'تسجيل الشراء', f"{purch} and {st_appr}", 50, 'fa-shopping-cart', hot=True)
+    action('DELIVER', 'تسجيل الاستلام', f"{purch} and {st_purch}", 60, 'fa-truck', hot=True)
+    action('CANCEL_REQ', 'إلغاء الطلب', st("'DRAFT','SUBMITTED','APPROVED'"), 70, 'fa-ban', confirm='إلغاء الطلب نهائيًا؟')
+    p.validation('Reject reason', 'ITEM_NOT_NULL', 'P7002_ACTION_REASON', 'اكتب سبب الرفض', item=reason, seq=50,
+                 when_button=btns['REJECT'])
+    calls = {
+        'SUBMIT': ("MOINFO_PRC.SUBMIT(:P7002_REQUEST_ID);", 'قُدّم الطلب للاعتماد'),
+        'APPROVE': ("MOINFO_PRC.APPROVE(:P7002_REQUEST_ID, :P7002_ACTION_REASON);", 'اعتُمد الطلب'),
+        'REJECT': ("MOINFO_PRC.REJECT(:P7002_REQUEST_ID, :P7002_ACTION_REASON);", 'رُفض الطلب'),
+        'REOPEN': ("MOINFO_PRC.REOPEN(:P7002_REQUEST_ID);", 'عاد الطلب مسودة'),
+        'PURCHASE': ("MOINFO_PRC.PURCHASE(:P7002_REQUEST_ID, to_date(:P7002_ACTION_DATE, 'DD/MM/YYYY'), :P7002_ACTION_PO_ID);",
+                     'سُجّل الشراء'),
+        'DELIVER': ("MOINFO_PRC.DELIVER(:P7002_REQUEST_ID, to_date(:P7002_ACTION_DATE, 'DD/MM/YYYY'));", 'سُجّل الاستلام'),
+        'CANCEL_REQ': ("MOINFO_PRC.CANCEL(:P7002_REQUEST_ID, :P7002_ACTION_REASON);", 'أُلغي الطلب'),
+    }
+    seq = 30
+    for name, (code, msg) in calls.items():
+        p.plsql_process(f'Action {name}', code + "\n:P7002_ACTION_REASON := null;", seq=seq, when_button=btns[name],
+                        success=msg)
+        seq += 1
+
+    # items
+    ir = p.ir_region('الأصناف', """select ITEM_ID, ITEM_NAME, PRODUCT_TYPE_AR, BRAND_NAME, MODEL_NAME, SUPPLIER_AR, QUANTITY, UNIT_PRICE,
+       LINE_TOTAL, APPROVAL_AR, REJECT_REASON, DESCRIPTION
+  from MOINFO_PRC_V_ITEMS
+ where REQUEST_ID = :P7002_REQUEST_ID
+ order by SORT_ORDER nulls last, ITEM_ID""",
+        [('ITEM_ID', None, 'NUMBER'), ('ITEM_NAME', 'الصنف', 'STRING'), ('PRODUCT_TYPE_AR', 'النوع', 'STRING'),
+         ('BRAND_NAME', 'الماركة', 'STRING'), ('MODEL_NAME', 'الموديل', 'STRING'), ('SUPPLIER_AR', 'المورد', 'STRING'),
+         ('QUANTITY', 'الكمية', 'NUMBER'), ('UNIT_PRICE', 'سعر الوحدة', 'NUMBER'), ('LINE_TOTAL', 'الإجمالي', 'NUMBER'),
+         ('APPROVAL_AR', 'القرار', 'STRING'), ('REJECT_REASON', 'سبب الرفض', 'STRING'), ('DESCRIPTION', 'الوصف', 'STRING')],
+        pk='ITEM_ID', link_page=7003, link_item='P7003_ITEM_ID', seq=30, cond=('ITEM_IS_NOT_NULL', 'P7002_REQUEST_ID'))
+    p.button(ir, 'ADD_ITEM', 'إضافة صنف', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:7003:&SESSION.::&DEBUG.:7003:P7003_REQUEST_ID:&P7002_REQUEST_ID.', icon='fa-plus',
+             cond_type='EXPRESSION', cond_item="MOINFO_PRC.CAN_EDIT(:P7002_REQUEST_ID) = 'Y'", cond_lang='PLSQL')
+
+    # attachments
+    fr = p.static_region('المرفقات', None, seq=40, cond=('ITEM_IS_NOT_NULL', 'P7002_REQUEST_ID'))
+    files = p.item(fr, 'P7002_FILES', label='إرفاق ملفات (عرض سعر، فاتورة ...)', display='FILE', seq=10, multiple=True)
+    up = p.button(fr, 'UPLOAD', 'رفع', position='NEXT', seq=10, icon='fa-upload', exec_val=False)
+    p.plsql_process('Store files', """declare
+    l_n number;
+begin
+    if MOINFO_PRC.CAN_SEE(:P7002_REQUEST_ID) = 'N' then
+        raise_application_error(-20100, 'لا تملك صلاحية على هذا الطلب');
+    end if;
+    l_n := MOINFO_FILES.ADD_FROM_APEX('PRC', 'MOINFO_PRC_REQUESTS', :P7002_REQUEST_ID, :P7002_FILES);
+end;""", seq=60, when_button=up, success='رُفعت الملفات')
+    p.ir_region('ملفات الطلب', """select a.ATTACHMENT_ID,
+       '<a href="' || apex_page.get_url(p_page => 7004, p_items => 'P7004_ATTACHMENT_ID', p_values => a.ATTACHMENT_ID)
+       || '"><span class="fa fa-download"></span> ' || apex_escape.html(a.FILE_NAME) || '</a>' as FILE_LINK,
+       a.FILE_SIZE_TEXT, a.CREATED_BY_NAME, to_char(cast(a.CREATED_AT as date), 'DD/MM/YYYY HH24:MI') as CREATED_AT_TXT
+  from MOINFO_V_ATTACHMENTS a
+ where a.ENTITY_NAME = 'MOINFO_PRC_REQUESTS' and a.ENTITY_ID = :P7002_REQUEST_ID
+ order by a.CREATED_AT desc""",
+        [('ATTACHMENT_ID', None, 'NUMBER'), ('FILE_LINK', 'الملف', 'HTML'), ('FILE_SIZE_TEXT', 'الحجم', 'STRING'),
+         ('CREATED_BY_NAME', 'رفعه', 'STRING'), ('CREATED_AT_TXT', 'الوقت', 'STRING')],
+        seq=50, cond=('ITEM_IS_NOT_NULL', 'P7002_REQUEST_ID'))
+    p.branch(7001, seq=10, when_button=delete)
+    p.branch(7002, seq=100, items=('P7002_REQUEST_ID', '&P7002_REQUEST_ID.'))
+    pages.append(p)
+
+    # 7003 item
+    p = Page(7003, 'صنف', authz='MOD_PRC', alias='PRC-ITEM')
+    guard(p, ":P7003_REQUEST_ID is not null and MOINFO_PRC.CAN_SEE(:P7003_REQUEST_ID) = 'N'", 'لا تملك صلاحية على هذا الطلب')
+    r = p.form_region('صنف', 'MOINFO_PRC_REQUEST_ITEMS')
+    p.item(r, 'P7003_ITEM_ID', display='HIDDEN', source='ITEM_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
+    p.item(r, 'P7003_REQUEST_ID', display='HIDDEN', source='REQUEST_ID', source_region=r, dtype='NUMBER', seq=2)
+    p.item(r, 'P7003_ITEM_NAME', label='الصنف', source='ITEM_NAME', source_region=r, required=True, maxlen=300, seq=10)
+    p.item(r, 'P7003_PRODUCT_TYPE_ID', label='النوع', display='SELECT', source='PRODUCT_TYPE_ID', source_region=r,
+           dtype='NUMBER', lov='CAT_PRODUCT_TYPES', null_text='- -', seq=20)
+    p.item(r, 'P7003_BRAND_ID', label='الماركة', display='SELECT', source='BRAND_ID', source_region=r, dtype='NUMBER',
+           lov='CAT_BRANDS', null_text='- -', seq=30, new_line=False)
+    p.item(r, 'P7003_MODEL_ID', label='الموديل', display='SELECT', source='MODEL_ID', source_region=r, dtype='NUMBER',
+           lov='PRC_MODELS_BY_BRAND', null_text='- -', seq=40, new_line=False, cascade='P7003_BRAND_ID')
+    p.item(r, 'P7003_SUPPLIER_ID', label='المورد المقترح', display='SELECT', source='SUPPLIER_ID', source_region=r,
+           dtype='NUMBER', lov='CAT_SUPPLIERS', null_text='- -', seq=50)
+    p.item(r, 'P7003_QUANTITY', label='الكمية', display='NUMBER', source='QUANTITY', source_region=r, dtype='NUMBER',
+           required=True, default='1', seq=60)
+    p.item(r, 'P7003_UNIT_PRICE', label='سعر الوحدة', display='NUMBER', source='UNIT_PRICE', source_region=r,
+           dtype='NUMBER', seq=70, new_line=False)
+    p.item(r, 'P7003_SORT_ORDER', label='الترتيب', display='NUMBER', source='SORT_ORDER', source_region=r, dtype='NUMBER',
+           seq=80, new_line=False)
+    p.item(r, 'P7003_DESCRIPTION', label='الوصف والمواصفات', display='TEXTAREA', source='DESCRIPTION', source_region=r,
+           seq=90)
+    dec = ('EXPRESSION', "MOINFO_PRC.CAN_DECIDE(:P7003_REQUEST_ID) = 'Y'", 'PLSQL')
+    p.item(r, 'P7003_IS_APPROVED', label='قرار الاعتماد', display='SELECT', source='IS_APPROVED', source_region=r,
+           lov='PRC_ITEM_DECISION', null_text='- لم يُحدد -', seq=100, cond=dec)
+    p.item(r, 'P7003_REJECT_REASON', label='سبب رفض الصنف', source='REJECT_REASON', source_region=r, maxlen=500, seq=110,
+           new_line=False, cond=dec)
+    back = "f?p=&APP_ID.:7002:&SESSION.::&DEBUG.::P7002_REQUEST_ID:&P7003_REQUEST_ID."
+    can_edit = "MOINFO_PRC.CAN_EDIT(:P7003_REQUEST_ID) = 'Y'"
+    p.button(r, 'CANCEL', 'إلغاء', action='REDIRECT_PAGE', position='CLOSE', seq=10, redirect=back, exec_val=False)
+    p.button(r, 'DELETE', 'حذف', position='DELETE', seq=20, cond_type='EXPRESSION',
+             cond_item=f":P7003_ITEM_ID is not null and {can_edit}", cond_lang='PLSQL',
+             db_action='DELETE', confirm='حذف الصنف؟', exec_val=False)
+    p.button(r, 'SAVE', 'حفظ', position='CHANGE', hot=True, seq=30, cond_type='EXPRESSION',
+             cond_item=f":P7003_ITEM_ID is not null and ({can_edit} or MOINFO_PRC.CAN_DECIDE(:P7003_REQUEST_ID) = 'Y')",
+             cond_lang='PLSQL', db_action='UPDATE')
+    p.button(r, 'CREATE', 'إضافة', position='CREATE', hot=True, seq=40, cond_type='EXPRESSION',
+             cond_item=f":P7003_ITEM_ID is null and {can_edit}", cond_lang='PLSQL', db_action='INSERT')
+    p.form_processes(r, 'Item', dml_cond=DML)
+    p.branch(7002, seq=100, items=('P7002_REQUEST_ID', '&P7003_REQUEST_ID.'))
+    pages.append(p)
+
+    # 7004 download
+    p = Page(7004, 'تنزيل ملف', authz='MOD_PRC', alias='PRC-DOWNLOAD')
+    dr = p.static_region('تنزيل', None, seq=10)
+    p.item(dr, 'P7004_ATTACHMENT_ID', display='HIDDEN', seq=10)
+    p.plsql_process('Download', """for a in (select ENTITY_ID from MOINFO_ATTACHMENTS
+           where ATTACHMENT_ID = :P7004_ATTACHMENT_ID and ENTITY_NAME = 'MOINFO_PRC_REQUESTS') loop
+    if MOINFO_PRC.CAN_SEE(a.ENTITY_ID) = 'Y' then
+        MOINFO_FILES.DOWNLOAD(:P7004_ATTACHMENT_ID);
+    end if;
+end loop;
+raise_application_error(-20100, 'الملف غير متاح');""", point='BEFORE_HEADER', seq=10)
+    pages.append(p)
+
+    # 7007 statistics
+    p = Page(7007, 'إحصائيات المشتريات', authz='MOD_PRC', alias='PRC-STATS')
+    p.ir_region('الطلبات حسب الشهر والجهة والحالة', """select to_char(REQUEST_MONTH, 'YYYY-MM') as MONTH_TXT, UNIT_AR, STATUS_AR, REQUESTS_COUNT, ITEMS_COUNT,
+       TOTAL_AMOUNT, APPROVED_AMOUNT
+  from MOINFO_PRC_V_STATS
+ where MOINFO_SEC.DATA_SCOPE('PRC') = 'ALL'
+    or (UNIT_ID is not null and MOINFO_SEC.CAN_SEE_UNIT('PRC', UNIT_ID) = 'Y')
+ order by REQUEST_MONTH desc, UNIT_AR, STATUS_AR""",
+        [('MONTH_TXT', 'الشهر', 'STRING'), ('UNIT_AR', 'الجهة', 'STRING'), ('STATUS_AR', 'الحالة', 'STRING'),
+         ('REQUESTS_COUNT', 'الطلبات', 'NUMBER'), ('ITEMS_COUNT', 'الأصناف', 'NUMBER'),
+         ('TOTAL_AMOUNT', 'الإجمالي', 'NUMBER'), ('APPROVED_AMOUNT', 'المعتمد', 'NUMBER')])
+    pages.append(p)
+    return pages
+
 def all_pages():
-    return hr_pages() + evt_pages() + med_pages() + tsk_pages() + att_pages() + hd_pages() + cat_pages()
+    return hr_pages() + evt_pages() + med_pages() + tsk_pages() + att_pages() + hd_pages() + cat_pages() + prc_pages()
 
