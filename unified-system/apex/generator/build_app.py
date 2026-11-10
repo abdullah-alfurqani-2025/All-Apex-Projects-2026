@@ -57,6 +57,7 @@ wwv_imp_workspace.create_flow(
 ,p_bookmark_checksum_function=>'SH512'
 ,p_compatibility_mode=>'26.1'
 ,p_flow_language=>'ar'
+,p_error_handling_function=>'MOINFO_APEX_ERROR_HANDLER'
 ,p_auto_time_zone=>'Y'
 ,p_flow_language_derived_from=>'FLOW_PRIMARY_LANGUAGE'
 ,p_allow_feedback_yn=>'N'

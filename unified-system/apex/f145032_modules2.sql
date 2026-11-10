@@ -697,7 +697,9 @@ wwv_flow_imp_page.create_page_process(
 ,p_static_id=>'action-submit-1360'
 ,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
 'MOINFO_PRC.SUBMIT(:P7002_REQUEST_ID);',
-':P7002_ACTION_REASON := null;'))
+':P7002_ACTION_REASON := null;',
+':P7002_ACTION_DATE := null;',
+':P7002_ACTION_PO_ID := null;'))
 ,p_process_clob_language=>'PLSQL'
 ,p_error_display_location=>'INLINE_IN_NOTIFICATION'
 ,p_process_when_button_id=>wwv_flow_imp.id(930000000000001352)
@@ -713,7 +715,9 @@ wwv_flow_imp_page.create_page_process(
 ,p_static_id=>'action-approve-1361'
 ,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
 'MOINFO_PRC.APPROVE(:P7002_REQUEST_ID, :P7002_ACTION_REASON);',
-':P7002_ACTION_REASON := null;'))
+':P7002_ACTION_REASON := null;',
+':P7002_ACTION_DATE := null;',
+':P7002_ACTION_PO_ID := null;'))
 ,p_process_clob_language=>'PLSQL'
 ,p_error_display_location=>'INLINE_IN_NOTIFICATION'
 ,p_process_when_button_id=>wwv_flow_imp.id(930000000000001353)
@@ -729,7 +733,9 @@ wwv_flow_imp_page.create_page_process(
 ,p_static_id=>'action-reject-1362'
 ,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
 'MOINFO_PRC.REJECT(:P7002_REQUEST_ID, :P7002_ACTION_REASON);',
-':P7002_ACTION_REASON := null;'))
+':P7002_ACTION_REASON := null;',
+':P7002_ACTION_DATE := null;',
+':P7002_ACTION_PO_ID := null;'))
 ,p_process_clob_language=>'PLSQL'
 ,p_error_display_location=>'INLINE_IN_NOTIFICATION'
 ,p_process_when_button_id=>wwv_flow_imp.id(930000000000001354)
@@ -745,7 +751,9 @@ wwv_flow_imp_page.create_page_process(
 ,p_static_id=>'action-reopen-1363'
 ,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
 'MOINFO_PRC.REOPEN(:P7002_REQUEST_ID);',
-':P7002_ACTION_REASON := null;'))
+':P7002_ACTION_REASON := null;',
+':P7002_ACTION_DATE := null;',
+':P7002_ACTION_PO_ID := null;'))
 ,p_process_clob_language=>'PLSQL'
 ,p_error_display_location=>'INLINE_IN_NOTIFICATION'
 ,p_process_when_button_id=>wwv_flow_imp.id(930000000000001355)
@@ -761,7 +769,9 @@ wwv_flow_imp_page.create_page_process(
 ,p_static_id=>'action-purchase-1364'
 ,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
 'MOINFO_PRC.PURCHASE(:P7002_REQUEST_ID, to_date(:P7002_ACTION_DATE, ''DD/MM/YYYY''), :P7002_ACTION_PO_ID);',
-':P7002_ACTION_REASON := null;'))
+':P7002_ACTION_REASON := null;',
+':P7002_ACTION_DATE := null;',
+':P7002_ACTION_PO_ID := null;'))
 ,p_process_clob_language=>'PLSQL'
 ,p_error_display_location=>'INLINE_IN_NOTIFICATION'
 ,p_process_when_button_id=>wwv_flow_imp.id(930000000000001356)
@@ -777,7 +787,9 @@ wwv_flow_imp_page.create_page_process(
 ,p_static_id=>'action-deliver-1365'
 ,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
 'MOINFO_PRC.DELIVER(:P7002_REQUEST_ID, to_date(:P7002_ACTION_DATE, ''DD/MM/YYYY''));',
-':P7002_ACTION_REASON := null;'))
+':P7002_ACTION_REASON := null;',
+':P7002_ACTION_DATE := null;',
+':P7002_ACTION_PO_ID := null;'))
 ,p_process_clob_language=>'PLSQL'
 ,p_error_display_location=>'INLINE_IN_NOTIFICATION'
 ,p_process_when_button_id=>wwv_flow_imp.id(930000000000001357)
@@ -793,7 +805,9 @@ wwv_flow_imp_page.create_page_process(
 ,p_static_id=>'action-cancel-req-1366'
 ,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
 'MOINFO_PRC.CANCEL(:P7002_REQUEST_ID, :P7002_ACTION_REASON);',
-':P7002_ACTION_REASON := null;'))
+':P7002_ACTION_REASON := null;',
+':P7002_ACTION_DATE := null;',
+':P7002_ACTION_PO_ID := null;'))
 ,p_process_clob_language=>'PLSQL'
 ,p_error_display_location=>'INLINE_IN_NOTIFICATION'
 ,p_process_when_button_id=>wwv_flow_imp.id(930000000000001358)

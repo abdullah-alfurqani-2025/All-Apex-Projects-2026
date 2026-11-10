@@ -1238,7 +1238,8 @@ end if;""", seq=15, cond=('REQUEST_EQUALS_CONDITION', 'CREATE'))
     }
     seq = 30
     for name, (code, msg) in calls.items():
-        p.plsql_process(f'Action {name}', code + "\n:P7002_ACTION_REASON := null;", seq=seq, when_button=btns[name],
+        p.plsql_process(f'Action {name}', code + "\n:P7002_ACTION_REASON := null;\n:P7002_ACTION_DATE := null;\n:P7002_ACTION_PO_ID := null;",
+                        seq=seq, when_button=btns[name],
                         success=msg)
         seq += 1
 
