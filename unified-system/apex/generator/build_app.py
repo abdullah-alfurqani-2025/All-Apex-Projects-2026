@@ -3,6 +3,7 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gen_app import *
+import modules
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else 'f145032.sql'
 
@@ -114,6 +115,7 @@ authz_calls = [
 for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD', 'PRC', 'STD', 'ADV', 'OMI', 'NWS']:
     authz_calls.append(authorization(f'MOD_{code}', f"return MOINFO_SEC.HAS_MODULE('{code}');",
                                      'لا تملك صلاحية على هذه الوحدة'))
+authz_calls += modules.authorizations()
 # list entries reference authorizations, so they come first
 parts.append(block("shared_components/security/authorizations/moinfo", authz_calls))
 
@@ -149,6 +151,7 @@ ADMIN_ITEMS = [
 ]
 
 menu_items = [dict(text='الرئيسية', page=1, icon='fa-home', static='home', key='home')]
+menu_items += modules.menu_items()
 menu_items.append(dict(text='إدارة النظام', target='#', icon='fa-cogs', key='admin', authz='ADMIN', static='admin'))
 for it in ADMIN_ITEMS:
     d = dict(it); d['parent'] = 'admin'; d.pop('desc', None)
@@ -165,6 +168,7 @@ bar_items = [
 ]
 parts.append(list_with_id(NAV_BAR, 'Navigation Bar', bar_items, 'navigation_bar'))
 
+parts.append(list_component('Home Module Cards', modules.home_cards(), 'home_module_cards'))
 home_items = [dict(it, static=f"home-{i}") for i, it in enumerate(ADMIN_ITEMS)]
 parts.append(list_component('Home Admin Cards', home_items, 'home_admin_cards'))
 
@@ -185,6 +189,7 @@ parts.append(lov('EMPLOYEES', """select e.NAME_AR || nvl2(e.EMPLOYEE_NO, ' - ' |
   from MOINFO_EMPLOYEES e where e.IS_ACTIVE = 'Y' order by e.NAME_AR"""))
 parts.append(lov('LOOKUP_TYPES', "select TYPE_NAME_AR || ' (' || LOOKUP_TYPE || ')' d, LOOKUP_TYPE r from MOINFO_LOOKUP_TYPES where IS_ACTIVE = 'Y' order by MODULE_CODE, TYPE_NAME_AR"))
 parts.append(lov('GOVERNORATES', "select NAME_AR d, GOVERNORATE_ID r from MOINFO_GOVERNORATES where IS_ACTIVE = 'Y' order by SORT_ORDER, NAME_AR"))
+parts += modules.lovs()
 parts.append(static_lov('GENDER', [('ذكر', 'M'), ('أنثى', 'F')]))
 parts.append(static_lov('DATA_SCOPE', [('كل البيانات', 'ALL'), ('وحدته التنظيمية وما تحتها', 'UNIT'), ('سجلاته فقط', 'OWN')]))
 
@@ -219,6 +224,7 @@ pages.append(p0)
 # 1 - Home
 p1 = Page(1, 'الرئيسية', title='النظام الموحد', alias='HOME')
 p1.static_region('النظام الموحد', '<p>مرحبًا &APP_USER.</p>', template=T_REG_HERO, seq=10, position='REGION_POSITION_01')
+p1.list_region('الوحدات', 'Home Module Cards', seq=15)
 p1.list_region('إدارة النظام', 'Home Admin Cards', seq=20)
 p1.plsql_process('Force password change', """if MOINFO_AUTH.MUST_CHANGE_PASSWORD(:APP_USER) then
     apex_util.redirect_url(apex_page.get_url(p_page => 10));
@@ -514,6 +520,8 @@ pages += crud(80, 81, 'الإعدادات', 'إعداد', 'MOINFO_SETTINGS', 'SE
      dict(col='SETTING_VALUE', label='القيمة', display='TEXTAREA', height=3)],
     'ADMIN', delete=False, allow_create=False, pk_dtype='VARCHAR2')
 
+mod_pages = modules.all_pages()
+
 for p in pages:
     if p.authz == 'ADMIN' and p.pid not in (1,):
         p.group = PG_ADMIN
@@ -534,4 +542,36 @@ prompt  ...done
 """)
 
 open(OUT, 'w', encoding='utf-8').write('\n'.join(parts))
-print(OUT, sum(len(x) for x in parts), 'chars,', len(pages), 'pages')
+print(OUT, sum(len(x.encode('utf-8')) for x in parts), 'bytes,', len(pages), 'pages')
+
+# second script: module pages (component install into the existing application)
+OUT2 = OUT.replace('.sql', '_modules.sql')
+m = [f"""prompt --application/set_environment
+set define off verify off feedback off
+whenever sqlerror exit sql.sqlcode rollback
+--------------------------------------------------------------------------------
+-- MOINFO - النظام الموحد: صفحات الوحدات (يُشغَّل بعد f145032.sql)
+--------------------------------------------------------------------------------
+begin
+wwv_flow_imp.import_begin (
+ p_version_yyyy_mm_dd=>'2026.04.07'
+,p_release=>'26.2.1'
+,p_default_workspace_id=>{WS_ID}
+,p_default_application_id=>{APP_ID}
+,p_default_id_offset=>0
+,p_default_owner=>'{OWNER}'
+);
+end;
+/
+"""]
+for p in mod_pages:
+    m.append(f"""prompt --application/pages/delete_{p.pid:05d}
+begin
+wwv_flow_imp_page.remove_page (p_flow_id=>wwv_flow.g_flow_id, p_page_id=>{p.pid});
+end;
+/
+""")
+    m.append(p.render())
+m.append(parts[-1])
+open(OUT2, 'w', encoding='utf-8').write('\n'.join(m))
+print(OUT2, sum(len(x.encode('utf-8')) for x in m), 'bytes,', len(mod_pages), 'pages')

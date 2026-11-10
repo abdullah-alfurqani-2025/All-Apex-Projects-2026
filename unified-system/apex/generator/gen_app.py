@@ -308,6 +308,9 @@ class Page:
         visible = []
         for idx, (col, label, typ) in enumerate(columns):
             hidden = label is None
+            html = typ == 'HTML'
+            if html:
+                typ = 'STRING'
             params = [
                 ("p_id", rid(nid())),
                 ("p_db_column_name", lit(col)),
@@ -316,7 +319,7 @@ class Page:
                 ("p_column_identifier", lit(ident(idx))),
                 ("p_column_label", lit(label or col)),
                 ("p_column_type", lit(typ)),
-                ("p_display_text_as", lit('HIDDEN_ESCAPE_SC') if hidden else None),
+                ("p_display_text_as", lit('HIDDEN_ESCAPE_SC') if hidden else (lit('WITHOUT_MODIFICATION') if html else None)),
                 ("p_heading_alignment", lit('RIGHT') if typ == 'NUMBER' else lit('LEFT')),
                 ("p_column_alignment", lit('RIGHT') if typ == 'NUMBER' else None),
                 ("p_format_mask", lit('DD/MM/YYYY') if typ == 'DATE' else None),
@@ -388,13 +391,13 @@ class Page:
     def item(self, region, name, label=None, display='TEXT', source=None, source_region=None, dtype='VARCHAR2',
              seq=10, required=False, pk=False, lov=None, null_text=None, maxlen=None, width=None, height=None,
              new_line=True, default=None, cond=None, read_only=False, help=None, pwd_autocomplete=None,
-             placeholder=None, icon=None, label_template=None):
+             placeholder=None, icon=None, label_template=None, default_expr=None, cascade=None, multiple=False):
         i = nid()
         da = {
             'TEXT': 'NATIVE_TEXT_FIELD', 'TEXTAREA': 'NATIVE_TEXTAREA', 'SELECT': 'NATIVE_SELECT_LIST',
             'POPUP': 'NATIVE_POPUP_LOV', 'DATE': 'NATIVE_DATE_PICKER_APEX', 'NUMBER': 'NATIVE_NUMBER_FIELD',
             'YESNO': 'NATIVE_YES_NO', 'HIDDEN': 'NATIVE_HIDDEN', 'PASSWORD': 'NATIVE_PASSWORD',
-            'DISPLAY': 'NATIVE_DISPLAY_ONLY',
+            'DISPLAY': 'NATIVE_DISPLAY_ONLY', 'FILE': 'NATIVE_FILE',
         }[display]
         a = {}
         if display == 'TEXT':
@@ -419,6 +422,9 @@ class Page:
             a = {'submit_when_enter_pressed': 'N'}
         elif display == 'DISPLAY':
             a = {'based_on': 'VALUE', 'format': 'PLAIN', 'send_on_page_submit': 'Y', 'show_line_breaks': 'Y'}
+        elif display == 'FILE':
+            a = {'allow_multiple_files': 'Y' if multiple else 'N', 'display_as': 'DROPZONE_BLOCK',
+                 'purge_file_at': 'REQUEST', 'storage_type': 'APEX_APPLICATION_TEMP_FILES'}
         if display == 'TEXT' and read_only:
             a['disabled'] = 'Y'
         if display == 'HIDDEN':
@@ -435,7 +441,9 @@ class Page:
             ("p_item_plug_id", rid(region)),
             ("p_item_source_plug_id", rid(source_region) if source_region else None),
             ("p_use_cache_before_default", lit('NO') if not source_region and display == 'HIDDEN' else None),
-            ("p_item_default", lit(default) if default is not None else None),
+            ("p_item_default", lit(default) if default is not None else (lit(default_expr) if default_expr else None)),
+            ("p_item_default_type", lit('EXPRESSION') if default_expr else None),
+            ("p_item_default_language", lit('PLSQL') if default_expr else None),
             ("p_prompt", lit(label) if label and display != 'HIDDEN' else None),
             ("p_placeholder", lit(placeholder) if placeholder else None),
             ("p_format_mask", lit('DD/MM/YYYY') if display == 'DATE' else None),
@@ -456,6 +464,8 @@ class Page:
             ("p_item_icon_css_classes", lit(icon) if icon else None),
             ("p_item_template_options", lit('#DEFAULT#') if display != 'HIDDEN' else None),
             ("p_lov_display_extra", lit('NO') if lov else None),
+            ("p_lov_cascade_parent_items", lit(cascade) if cascade else None),
+            ("p_ajax_optimize_refresh", lit('Y') if cascade else None),
             ("p_is_persistent", lit('N') if source_region else None),
             ("p_protection_level", lit('S') if display == 'HIDDEN' else None),
             ("p_inline_help_text", lit(help) if help else None),
@@ -501,7 +511,7 @@ class Page:
             ("p_internal_uid", str(i)),
         ]))
 
-    def form_processes(self, region, name, success=None):
+    def form_processes(self, region, name, success=None, dml_cond=None):
         i = nid()
         self.calls.append(call("wwv_flow_imp_page.create_page_process", [
             ("p_id", rid(i)),
@@ -526,10 +536,12 @@ class Page:
                                     'return_primary_keys_after_insert': 'Y', 'target_type': 'REGION_SOURCE'})),
             ("p_error_display_location", lit('INLINE_IN_NOTIFICATION')),
             ("p_process_success_message", lit(success or 'تم الحفظ بنجاح')),
+            ("p_process_when", lit(dml_cond) if dml_cond else None),
+            ("p_process_when_type", lit('REQUEST_IN_CONDITION') if dml_cond else None),
             ("p_internal_uid", str(j)),
         ]))
 
-    def branch(self, page, seq=10, items=None, when_button=None):
+    def branch(self, page, seq=10, items=None, when_button=None, cond=None):
         i = nid()
         target = f"f?p=&APP_ID.:{page}:&SESSION.::&DEBUG.:::&success_msg=#SUCCESS_MSG#"
         if items:
@@ -541,6 +553,8 @@ class Page:
             ("p_branch_point", lit('AFTER_PROCESSING')),
             ("p_branch_type", lit('REDIRECT_URL')),
             ("p_branch_when_button_id", rid(when_button) if when_button else None),
+            ("p_branch_condition_type", lit(cond[0]) if cond else None),
+            ("p_branch_condition", lit(cond[1]) if cond else None),
             ("p_branch_sequence", str(seq)),
         ]))
 
@@ -548,7 +562,7 @@ class Page:
 # ---- helpers to build CRUD pairs ---------------------------------------------
 def crud(list_pid, form_pid, title_list, title_form, table, pk, sql, columns, fields, authz,
          form_extra=None, list_extra=None, delete=True, create_label='إضافة', allow_create=True, pk_dtype='NUMBER',
-         pk_field=None):
+         pk_field=None, form_authz=None, dml_cond=None):
     """fields: list of dict(col,label,display,required,lov,null_text,dtype,maxlen,default,new_line,help)"""
     lp = Page(list_pid, title_list, authz=authz)
     reg = lp.ir_region(title_list, sql, columns, pk=pk, link_page=form_pid, link_item=f"P{form_pid}_{pk}")
@@ -558,7 +572,7 @@ def crud(list_pid, form_pid, title_list, title_form, table, pk, sql, columns, fi
     if list_extra:
         list_extra(lp, reg)
 
-    fp = Page(form_pid, title_form, authz=authz)
+    fp = Page(form_pid, title_form, authz=form_authz or authz)
     freg = fp.form_region(title_form, table)
     if pk_field:
         fp.item(freg, f"P{form_pid}_{pk}", label=pk_field, display='TEXT', source=pk, source_region=freg, dtype=pk_dtype,
@@ -571,7 +585,8 @@ def crud(list_pid, form_pid, title_list, title_form, table, pk, sql, columns, fi
                 source=f['col'], source_region=freg, dtype=f.get('dtype', 'VARCHAR2'), seq=seq,
                 required=f.get('required', False), lov=f.get('lov'), null_text=f.get('null_text'),
                 maxlen=f.get('maxlen'), default=f.get('default'), new_line=f.get('new_line', True),
-                help=f.get('help'), height=f.get('height'))
+                help=f.get('help'), height=f.get('height'), default_expr=f.get('default_expr'),
+                cascade=f.get('cascade'))
         seq += 10
     cancel = fp.button(freg, 'CANCEL', 'إلغاء', action='REDIRECT_PAGE', position='CLOSE', seq=10,
                        redirect=f"f?p=&APP_ID.:{list_pid}:&SESSION.::&DEBUG.:::", exec_val=False)
@@ -585,6 +600,6 @@ def crud(list_pid, form_pid, title_list, title_form, table, pk, sql, columns, fi
                   cond_type='ITEM_IS_NULL', db_action='INSERT')
     if form_extra:
         form_extra(fp, freg)
-    fp.form_processes(freg, title_form)
+    fp.form_processes(freg, title_form, dml_cond=dml_cond)
     fp.branch(list_pid, seq=100)
     return [lp, fp]
