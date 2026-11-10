@@ -8,7 +8,7 @@ DML = 'CREATE,SAVE,DELETE'
 # ------------------------------------------------------------------------------
 def authorizations():
     calls = []
-    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD', 'PRC']:
+    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD', 'PRC', 'STD']:
         calls.append(authorization(f'{code}_MANAGER', f"return MOINFO_SEC.HAS_ROLE('{code}', 'MANAGER');",
                                    'هذه الصفحة للمشرفين في الوحدة'))
     calls.append(authorization('CAT_MANAGER', """return MOINFO_SEC.IS_ADMIN
@@ -17,6 +17,8 @@ def authorizations():
     or MOINFO_SEC.HAS_ROLE('STD', 'MANAGER');""", 'الكتالوج المشترك لمشرفي الدعم الفني والمشتريات والمخزن'))
     calls.append(authorization('PRC_PURCHASER', "return MOINFO_SEC.HAS_ROLE('PRC', 'ADMIN');",
                                'هذه الصفحة لقسم المشتريات'))
+    calls.append(authorization('STD_USER', "return MOINFO_SEC.HAS_ROLE('STD', 'USER');",
+                               'هذه الصفحة لمن يصرف ويستلم من المخزن'))
     calls.append(authorization('HAS_EMPLOYEE', 'return MOINFO_HR.MY_EMPLOYEE_ID is not null;',
                                'حسابك غير مرتبط بموظف'))
     return calls
@@ -31,7 +33,8 @@ def lovs():
     out = []
     for t in ['HR_MARITAL_STATUS', 'HR_RELIGION', 'HR_APPOINTMENT_TYPE', 'HR_QUALIFICATION', 'HR_BANK',
               'HR_EMP_STATUS', 'EVT_TYPE', 'MED_EVENT', 'MED_EVENT_TYPE', 'TSK_STATUS', 'TSK_TYPE',
-              'TSK_CATEGORY', 'ATT_CATEGORY', 'HD_DEVICE_STATUS', 'HD_REQUEST_STATUS', 'PRC_REQUEST_STATUS']:
+              'TSK_CATEGORY', 'ATT_CATEGORY', 'HD_DEVICE_STATUS', 'HD_REQUEST_STATUS', 'PRC_REQUEST_STATUS',
+              'STD_ITEM_STATUS', 'STD_LOCATION', 'STD_BIN']:
         out.append(lookup_lov(t))
     out.append(lov('COUNTRIES', "select NAME_AR d, COUNTRY_ID r from MOINFO_COUNTRIES where IS_ACTIVE = 'Y' order by SORT_ORDER, NAME_AR"))
     out.append(lov('WILAYATS', """select g.NAME_AR || ' - ' || w.NAME_AR d, w.WILAYAT_ID r
@@ -61,6 +64,13 @@ def lovs():
     out.append(lov('PRC_MODELS_BY_BRAND', """select NAME d, MODEL_ID r from MOINFO_CAT_MODELS
  where IS_ACTIVE = 'Y' and BRAND_ID = :P7003_BRAND_ID
  order by NAME"""))
+    out.append(lov('STD_MODELS_BY_BRAND', """select NAME d, MODEL_ID r from MOINFO_CAT_MODELS
+ where IS_ACTIVE = 'Y' and BRAND_ID = :P8002_BRAND_ID
+ order by NAME"""))
+    out.append(static_lov('STD_MOVEMENT_TYPE', [('صرف', 'OUT'), ('إرجاع', 'RETURN'), ('استلام (توريد)', 'IN'),
+                                                ('تسوية بعد الجرد', 'ADJUST')]))
+    out.append(static_lov('STD_LIST_TYPES', [('حالة المعدة', 'STD_ITEM_STATUS'), ('موقع التخزين', 'STD_LOCATION'),
+                                             ('الرف أو الخانة', 'STD_BIN')]))
     out.append(static_lov('PRC_ITEM_DECISION', [('معتمد', 'Y'), ('مرفوض', 'N')]))
     out.append(static_lov('MED_CREW_ROLE', [('مصور', 'PHOTOGRAPHER'), ('مونتاج', 'EDITOR'), ('مراسل', 'REPORTER')]))
     out.append(static_lov('TSK_PRIORITY', [('منخفضة', 'LOW'), ('عادية', 'NORMAL'), ('عالية', 'HIGH'), ('عاجلة', 'URGENT')]))
@@ -106,6 +116,14 @@ MODULE_MENU = [
         ('الشراء والاستلام', 7006, '7006', 'PRC_PURCHASER'),
         ('الإحصائيات', 7007, '7007', 'MOD_PRC'),
     ]),
+    ('STD', 'مخزن الاستوديو', 'fa-video-camera', [
+        ('المعدات', 8001, '8001,8002', 'MOD_STD'),
+        ('صرف واستلام بالباركود', 8003, '8003', 'STD_USER'),
+        ('لدى المستلمين', 8004, '8004', 'MOD_STD'),
+        ('سجل الحركات', 8005, '8005', 'MOD_STD'),
+        ('النواقص', 8006, '8006', 'MOD_STD'),
+        ('قوائم المخزن', 8007, '8007,8008', 'STD_MANAGER'),
+    ]),
     ('CAT', 'الكتالوج المشترك', 'fa-tags', [
         ('أنواع المنتجات', 100, '100,101', 'CAT_MANAGER'),
         ('الماركات', 102, '102,103', 'CAT_MANAGER'),
@@ -137,6 +155,7 @@ def home_cards():
         'ATT': 'المناوبات والمحاضر ونماذج الخطابات',
         'HD': 'طلبات الدعم والأجهزة والتسليم والضمان',
         'PRC': 'طلبات الشراء والاعتماد والشراء والاستلام',
+        'STD': 'المعدات وصرفها واستلامها والجرد',
         'CAT': 'الماركات والموديلات والموردون وأنواع الضمان',
     }
     out = [dict(text='بياناتي', page=1010, icon='fa-user-circle', authz='HAS_EMPLOYEE', desc='بياناتك الوظيفية والشخصية',
@@ -1354,6 +1373,205 @@ raise_application_error(-20100, 'الملف غير متاح');""", point='BEFORE
     pages.append(p)
     return pages
 
+# ------------------------------------------------------------------------------
+# STD (8000)
+# ------------------------------------------------------------------------------
+def std_movement_region(p, pid, item_expr, region_cond, seq):
+    """منطقة تسجيل حركة: تُستخدم في صفحة المعدة وصفحة الباركود"""
+    mr = p.static_region('تسجيل حركة', None, seq=seq, cond=region_cond)
+    P = f'P{pid}_MV_'
+    mtype = p.item(mr, P + 'TYPE', label='نوع الحركة', display='SELECT', lov='STD_MOVEMENT_TYPE', seq=10,
+                   default='OUT', required=True)
+    qty = p.item(mr, P + 'QTY', label='الكمية', display='NUMBER', dtype='NUMBER', seq=20, new_line=False,
+                 help='في التسوية: اكتب الرصيد الجديد بعد الجرد')
+    p.item(mr, P + 'DATE', label='التاريخ', display='DATE', dtype='DATE', seq=30, new_line=False,
+           default_expr="to_char(sysdate, 'DD/MM/YYYY')")
+    p.item(mr, P + 'EMPLOYEE_ID', label='المستلم (موظف)', display='POPUP', dtype='NUMBER', lov='EMPLOYEES', null_text='',
+           seq=40, help='للصرف والإرجاع')
+    p.item(mr, P + 'PERSON', label='أو اسم المستلم', seq=50, new_line=False, maxlen=200,
+           help='لمن ليس موظفًا في النظام')
+    p.item(mr, P + 'AUTH_ID', label='بتفويض من', display='POPUP', dtype='NUMBER', lov='EMPLOYEES', null_text='', seq=60)
+    p.item(mr, P + 'EXPECTED', label='تاريخ الإرجاع المتوقع', display='DATE', dtype='DATE', seq=70, new_line=False)
+    p.item(mr, P + 'REMARKS', label='ملاحظات', seq=80, maxlen=1000, help='إلزامية في التسوية')
+    btn = p.button(mr, 'MOVE', 'تسجيل الحركة', position='NEXT', hot=True, seq=10, icon='fa-exchange')
+    p.validation('Movement qty', 'ITEM_NOT_NULL', P + 'QTY', 'اكتب الكمية', item=qty, seq=60, when_button=btn)
+    p.plsql_process('Record movement', f"""declare
+    l_item number := {item_expr};
+    l_date date := nvl(to_date(:{P}DATE, 'DD/MM/YYYY'), trunc(sysdate));
+    l_qty  number := to_number(:{P}QTY);
+begin
+    case :{P}TYPE
+        when 'IN' then
+            MOINFO_STD.RECEIVE(l_item, l_qty, l_date, :{P}REMARKS);
+        when 'OUT' then
+            MOINFO_STD.ISSUE(l_item, l_qty, :{P}EMPLOYEE_ID, :{P}PERSON, :{P}AUTH_ID,
+                             to_date(:{P}EXPECTED, 'DD/MM/YYYY'), l_date, :{P}REMARKS);
+        when 'RETURN' then
+            MOINFO_STD.RETURN_ITEM(l_item, l_qty, :{P}EMPLOYEE_ID, :{P}PERSON, l_date, :{P}REMARKS);
+        when 'ADJUST' then
+            MOINFO_STD.ADJUST(l_item, l_qty, :{P}REMARKS, l_date);
+    end case;
+    :{P}QTY := null;
+    :{P}EMPLOYEE_ID := null;
+    :{P}PERSON := null;
+    :{P}AUTH_ID := null;
+    :{P}EXPECTED := null;
+    :{P}REMARKS := null;
+end;""", seq=50, when_button=btn, success='سُجّلت الحركة')
+    return btn
+
+STD_MOV_COLS = [('MOVEMENT_ID', None, 'NUMBER'), ('MOVEMENT_DATE_TXT', 'التاريخ', 'STRING'),
+                ('MOVEMENT_TYPE_AR', 'الحركة', 'STRING'), ('QTY', 'الكمية', 'NUMBER'),
+                ('BALANCE_AFTER', 'الرصيد بعدها', 'NUMBER'), ('RECIPIENT_AR', 'المستلم', 'STRING'),
+                ('AUTHORIZED_BY_AR', 'بتفويض من', 'STRING'), ('EXPECTED_RETURN_DATE', 'الإرجاع المتوقع', 'DATE'),
+                ('REMARKS', 'ملاحظات', 'STRING'), ('CREATED_BY_NAME', 'بواسطة', 'STRING')]
+STD_MOV_SEL = """select MOVEMENT_ID, to_char(MOVEMENT_DATE, 'DD/MM/YYYY HH24:MI') as MOVEMENT_DATE_TXT, MOVEMENT_TYPE_AR, QTY,
+       BALANCE_AFTER, RECIPIENT_AR, AUTHORIZED_BY_AR, EXPECTED_RETURN_DATE, REMARKS, CREATED_BY_NAME"""
+STD_OUT_COLS = [('ITEM_ID', None, 'NUMBER'), ('BARCODE', 'الباركود', 'STRING'), ('ITEM_NAME', 'المعدة', 'STRING'),
+                ('RECIPIENT_AR', 'المستلم', 'STRING'), ('EMPLOYEE_NO', 'الرقم الوظيفي', 'STRING'),
+                ('PHONE_EXT', 'التحويلة', 'STRING'), ('QTY_OUT', 'الكمية', 'NUMBER'),
+                ('LAST_ISSUE_DATE', 'آخر صرف', 'DATE'), ('EXPECTED_RETURN_DATE', 'الإرجاع المتوقع', 'DATE'),
+                ('DAYS_OUT', 'منذ (أيام)', 'NUMBER'), ('OVERDUE_AR', 'متأخر', 'STRING')]
+STD_OUT_SEL = """select ITEM_ID, BARCODE, ITEM_NAME, RECIPIENT_AR, EMPLOYEE_NO, PHONE_EXT, QTY_OUT, LAST_ISSUE_DATE,
+       EXPECTED_RETURN_DATE, DAYS_OUT, case IS_OVERDUE when 'Y' then 'متأخر' end as OVERDUE_AR
+  from MOINFO_STD_V_OUTSTANDING"""
+
+def std_pages():
+    pages = []
+    item_cols = [('ITEM_ID', None, 'NUMBER'), ('BARCODE', 'الباركود', 'STRING'), ('ITEM_NAME', 'المعدة', 'STRING'),
+                 ('SERIAL_NO', 'الرقم التسلسلي', 'STRING'), ('PRODUCT_TYPE_AR', 'النوع', 'STRING'),
+                 ('BRAND_NAME', 'الماركة', 'STRING'), ('MODEL_NAME', 'الموديل', 'STRING'),
+                 ('STATUS_AR', 'الحالة', 'STRING'), ('LOCATION_AR', 'الموقع', 'STRING'), ('BIN_AR', 'الرف', 'STRING'),
+                 ('QTY_IN_STOCK', 'في المخزن', 'NUMBER'), ('QTY_OUT', 'مصروف', 'NUMBER'),
+                 ('QTY_TOTAL', 'الإجمالي', 'NUMBER'), ('MIN_QTY', 'الحد الأدنى', 'NUMBER'), ('LOW_AR', 'نقص', 'STRING')]
+    item_sel = """select ITEM_ID, BARCODE, ITEM_NAME, SERIAL_NO, PRODUCT_TYPE_AR, BRAND_NAME, MODEL_NAME, STATUS_AR, LOCATION_AR,
+       BIN_AR, QTY_IN_STOCK, QTY_OUT, QTY_TOTAL, MIN_QTY, case IS_LOW when 'Y' then 'نقص' end as LOW_AR
+  from MOINFO_STD_V_ITEMS"""
+    mgr = ('EXPRESSION', "MOINFO_STD.IS_MANAGER = 'Y'", 'PLSQL')
+
+    # 8001 items
+    p = Page(8001, 'المعدات', authz='MOD_STD', alias='STD-ITEMS')
+    reg = p.ir_region('المعدات', item_sel + "\n where IS_ACTIVE = 'Y'\n order by ITEM_NAME", item_cols, pk='ITEM_ID',
+                      link_page=8002, link_item='P8002_ITEM_ID')
+    p.button(reg, 'CREATE', 'معدة جديدة', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:8002:&SESSION.::&DEBUG.:8002::', icon='fa-plus',
+             cond_type='EXPRESSION', cond_item="MOINFO_STD.IS_MANAGER = 'Y'", cond_lang='PLSQL')
+    pages.append(p)
+
+    # 8002 item
+    p = Page(8002, 'معدة', authz='MOD_STD', alias='STD-ITEM')
+    r = p.form_region('معدة', 'MOINFO_STD_ITEMS')
+    p.item(r, 'P8002_ITEM_ID', display='HIDDEN', source='ITEM_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
+    p.item(r, 'P8002_ITEM_NAME', label='اسم المعدة', source='ITEM_NAME', source_region=r, required=True, maxlen=255, seq=10)
+    p.item(r, 'P8002_BARCODE', label='الباركود', source='BARCODE', source_region=r, maxlen=50, seq=20,
+           help='اتركه فارغًا ليُولَّد رقم تلقائيًا')
+    p.item(r, 'P8002_SERIAL_NO', label='الرقم التسلسلي', source='SERIAL_NO', source_region=r, maxlen=100, seq=30,
+           new_line=False)
+    p.item(r, 'P8002_PRODUCT_TYPE_ID', label='النوع', display='SELECT', source='PRODUCT_TYPE_ID', source_region=r,
+           dtype='NUMBER', lov='CAT_PRODUCT_TYPES', null_text='- -', seq=40)
+    p.item(r, 'P8002_BRAND_ID', label='الماركة', display='SELECT', source='BRAND_ID', source_region=r, dtype='NUMBER',
+           lov='CAT_BRANDS', null_text='- -', seq=50, new_line=False)
+    p.item(r, 'P8002_MODEL_ID', label='الموديل', display='SELECT', source='MODEL_ID', source_region=r, dtype='NUMBER',
+           lov='STD_MODELS_BY_BRAND', null_text='- -', seq=60, new_line=False, cascade='P8002_BRAND_ID')
+    p.item(r, 'P8002_STATUS_ID', label='الحالة', display='SELECT', source='STATUS_ID', source_region=r, dtype='NUMBER',
+           lov='LK_STD_ITEM_STATUS', null_text='- -', seq=70)
+    p.item(r, 'P8002_LOCATION_ID', label='الموقع', display='SELECT', source='LOCATION_ID', source_region=r, dtype='NUMBER',
+           lov='LK_STD_LOCATION', null_text='- -', seq=80, new_line=False)
+    p.item(r, 'P8002_BIN_ID', label='الرف أو الخانة', display='SELECT', source='BIN_ID', source_region=r, dtype='NUMBER',
+           lov='LK_STD_BIN', null_text='- -', seq=90, new_line=False)
+    p.item(r, 'P8002_QTY_IN_STOCK', label='الكمية الافتتاحية', display='NUMBER', source='QTY_IN_STOCK', source_region=r,
+           dtype='NUMBER', default='0', seq=100, cond=('ITEM_IS_NULL', 'P8002_ITEM_ID'),
+           help='بعد الإضافة يتغير الرصيد بالحركات فقط')
+    p.item(r, 'P8002_STOCK_TXT', label='الرصيد', display='DISPLAY', seq=101, cond=('ITEM_IS_NOT_NULL', 'P8002_ITEM_ID'))
+    p.item(r, 'P8002_MIN_QTY', label='الحد الأدنى للتنبيه', display='NUMBER', source='MIN_QTY', source_region=r,
+           dtype='NUMBER', seq=110, new_line=False)
+    p.item(r, 'P8002_WARRANTY_END', label='نهاية الضمان', display='DATE', source='WARRANTY_END', source_region=r,
+           dtype='DATE', seq=120, new_line=False)
+    p.item(r, 'P8002_DESCRIPTION', label='الوصف', display='TEXTAREA', source='DESCRIPTION', source_region=r, seq=130)
+    p.item(r, 'P8002_IS_ACTIVE', label='نشطة', display='YESNO', source='IS_ACTIVE', source_region=r, default='Y', seq=140)
+    p.plsql_process('Load stock', """for x in (select QTY_IN_STOCK, QTY_OUT, QTY_TOTAL from MOINFO_STD_V_ITEMS
+           where ITEM_ID = :P8002_ITEM_ID) loop
+    :P8002_STOCK_TXT := 'في المخزن ' || x.QTY_IN_STOCK || '، مصروف ' || x.QTY_OUT || '، الإجمالي ' || x.QTY_TOTAL;
+end loop;""", point='BEFORE_HEADER', seq=20, cond=('ITEM_IS_NOT_NULL', 'P8002_ITEM_ID'))
+    p.button(r, 'BACK', 'رجوع', action='REDIRECT_PAGE', position='CLOSE', seq=10,
+             redirect='f?p=&APP_ID.:8001:&SESSION.::&DEBUG.:::', exec_val=False)
+    delete = p.button(r, 'DELETE', 'حذف', position='DELETE', seq=20, cond_type='EXPRESSION',
+                      cond_item=":P8002_ITEM_ID is not null and MOINFO_STD.IS_MANAGER = 'Y'", cond_lang='PLSQL',
+                      db_action='DELETE', confirm='حذف المعدة وكل حركاتها؟', exec_val=False)
+    p.button(r, 'SAVE', 'حفظ', position='CHANGE', hot=True, seq=30, cond_type='EXPRESSION',
+             cond_item=":P8002_ITEM_ID is not null and MOINFO_STD.IS_MANAGER = 'Y'", cond_lang='PLSQL',
+             db_action='UPDATE')
+    p.button(r, 'CREATE', 'إضافة', position='CREATE', hot=True, seq=40, cond_type='EXPRESSION',
+             cond_item=":P8002_ITEM_ID is null and MOINFO_STD.IS_MANAGER = 'Y'", cond_lang='PLSQL', db_action='INSERT')
+    p.form_processes(r, 'Item', dml_cond=DML, success='تم الحفظ')
+    move = std_movement_region(p, 8002, ':P8002_ITEM_ID',
+                               ('EXPRESSION', ":P8002_ITEM_ID is not null and MOINFO_STD.CAN_MOVE = 'Y'", 'PLSQL'), 20)
+    p.ir_region('لدى المستلمين', STD_OUT_SEL + "\n where ITEM_ID = :P8002_ITEM_ID\n order by LAST_ISSUE_DATE",
+                STD_OUT_COLS, seq=30, cond=('ITEM_IS_NOT_NULL', 'P8002_ITEM_ID'))
+    p.ir_region('سجل الحركات', STD_MOV_SEL + "\n  from MOINFO_STD_V_MOVEMENTS\n where ITEM_ID = :P8002_ITEM_ID\n order by MOVEMENT_DATE desc, MOVEMENT_ID desc",
+                STD_MOV_COLS, seq=40, cond=('ITEM_IS_NOT_NULL', 'P8002_ITEM_ID'))
+    p.branch(8001, seq=10, when_button=delete)
+    p.branch(8002, seq=100, items=('P8002_ITEM_ID', '&P8002_ITEM_ID.'))
+    pages.append(p)
+
+    # 8003 barcode
+    p = Page(8003, 'صرف واستلام بالباركود', authz='STD_USER', alias='STD-SCAN')
+    sr = p.static_region('المعدة', None, seq=10)
+    p.item(sr, 'P8003_CODE', label='الباركود أو الرقم التسلسلي', seq=10, submit_on_enter=True, maxlen=100,
+           help='امسح الباركود أو اكتبه ثم اضغط Enter')
+    p.item(sr, 'P8003_ITEM_ID', display='HIDDEN', dtype='NUMBER', seq=20)
+    p.item(sr, 'P8003_ITEM_INFO', label='المعدة', display='DISPLAY', seq=30, cond=('ITEM_IS_NOT_NULL', 'P8003_CODE'))
+    p.plsql_process('Find item', """:P8003_ITEM_ID := MOINFO_STD.ITEM_BY_CODE(:P8003_CODE);
+:P8003_ITEM_INFO := 'لا توجد معدة بهذا الرمز';
+for x in (select ITEM_NAME, BARCODE, STATUS_AR, LOCATION_AR, BIN_AR, QTY_IN_STOCK, QTY_OUT
+            from MOINFO_STD_V_ITEMS where ITEM_ID = :P8003_ITEM_ID) loop
+    :P8003_ITEM_INFO := x.ITEM_NAME || ' (' || x.BARCODE || ') - ' || x.STATUS_AR
+        || nvl2(x.LOCATION_AR, ' - ' || x.LOCATION_AR, '') || nvl2(x.BIN_AR, ' / ' || x.BIN_AR, '')
+        || ' - في المخزن ' || x.QTY_IN_STOCK || '، مصروف ' || x.QTY_OUT;
+end loop;""", point='BEFORE_HEADER', seq=10, cond=('ITEM_IS_NOT_NULL', 'P8003_CODE'))
+    std_movement_region(p, 8003, 'MOINFO_STD.ITEM_BY_CODE(:P8003_CODE)',
+                        ('EXPRESSION', 'MOINFO_STD.ITEM_BY_CODE(:P8003_CODE) is not null', 'PLSQL'), 20)
+    p.ir_region('لدى المستلمين', STD_OUT_SEL + "\n where ITEM_ID = MOINFO_STD.ITEM_BY_CODE(:P8003_CODE)\n order by LAST_ISSUE_DATE",
+                STD_OUT_COLS, seq=30, cond=('ITEM_IS_NOT_NULL', 'P8003_CODE'))
+    p.branch(8003, seq=100, items=('P8003_CODE', '&P8003_CODE.'))
+    pages.append(p)
+
+    # 8004 outstanding
+    p = Page(8004, 'المعدات لدى المستلمين', authz='MOD_STD', alias='STD-OUTSTANDING')
+    p.ir_region('المعدات لدى المستلمين', STD_OUT_SEL + "\n order by IS_OVERDUE desc, LAST_ISSUE_DATE", STD_OUT_COLS,
+                pk='ITEM_ID', link_page=8002, link_item='P8002_ITEM_ID')
+    pages.append(p)
+
+    # 8005 movements
+    p = Page(8005, 'سجل الحركات', authz='MOD_STD', alias='STD-MOVEMENTS')
+    cols = [('ITEM_ID', None, 'NUMBER'), ('BARCODE', 'الباركود', 'STRING'), ('ITEM_NAME', 'المعدة', 'STRING')] + STD_MOV_COLS
+    p.ir_region('سجل الحركات', STD_MOV_SEL + ", ITEM_ID, BARCODE, ITEM_NAME\n  from MOINFO_STD_V_MOVEMENTS\n order by MOVEMENT_DATE desc, MOVEMENT_ID desc",
+                cols, pk='ITEM_ID', link_page=8002, link_item='P8002_ITEM_ID')
+    pages.append(p)
+
+    # 8006 low stock
+    p = Page(8006, 'النواقص', authz='MOD_STD', alias='STD-LOW')
+    p.ir_region('المعدات التي بلغت الحد الأدنى', item_sel + "\n where IS_ACTIVE = 'Y' and IS_LOW = 'Y'\n order by ITEM_NAME",
+                item_cols, pk='ITEM_ID', link_page=8002, link_item='P8002_ITEM_ID')
+    pages.append(p)
+
+    # 8007/8008 store lists
+    pages += crud(8007, 8008, 'قوائم المخزن', 'قيمة', 'MOINFO_LOOKUPS', 'LOOKUP_ID',
+        f"""select l.LOOKUP_ID, t.TYPE_NAME_AR, l.NAME_AR, l.NAME_EN, l.SORT_ORDER, {YN.format(c='l.IS_ACTIVE')} as IS_ACTIVE_AR
+  from MOINFO_LOOKUPS l
+  join MOINFO_LOOKUP_TYPES t on t.LOOKUP_TYPE = l.LOOKUP_TYPE
+ where l.LOOKUP_TYPE in ('STD_ITEM_STATUS', 'STD_LOCATION', 'STD_BIN')
+ order by t.TYPE_NAME_AR, l.SORT_ORDER, l.NAME_AR""",
+        [('LOOKUP_ID', None, 'NUMBER'), ('TYPE_NAME_AR', 'القائمة', 'STRING'), ('NAME_AR', 'القيمة', 'STRING'),
+         ('NAME_EN', 'بالإنجليزية', 'STRING'), ('SORT_ORDER', 'الترتيب', 'NUMBER'), ('IS_ACTIVE_AR', 'نشطة', 'STRING')],
+        [dict(col='LOOKUP_TYPE', label='القائمة', display='SELECT', lov='STD_LIST_TYPES', required=True, dtype='VARCHAR2'),
+         dict(col='NAME_AR', label='القيمة بالعربية', required=True, maxlen=255),
+         dict(col='NAME_EN', label='بالإنجليزية', maxlen=255, new_line=False),
+         dict(col='SORT_ORDER', label='الترتيب', display='NUMBER', dtype='NUMBER'),
+         dict(col='IS_ACTIVE', label='نشطة', display='YESNO', default='Y', new_line=False)],
+        'STD_MANAGER')
+    return pages
+
 def all_pages():
-    return hr_pages() + evt_pages() + med_pages() + tsk_pages() + att_pages() + hd_pages() + cat_pages() + prc_pages()
+    return hr_pages() + evt_pages() + med_pages() + tsk_pages() + att_pages() + hd_pages() + cat_pages() + prc_pages() + std_pages()
 
