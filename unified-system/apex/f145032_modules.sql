@@ -2832,9 +2832,16 @@ wwv_flow_imp_page.create_page_process(
 ,p_process_name=>'Row access check'
 ,p_static_id=>'row-access-check-589'
 ,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
-'if :P2002_EVENT_ID is not null and MOINFO_EVT.CAN_SEE((select EMPLOYEE_ID from MOINFO_EVT_EVENTS where EVENT_ID = :P2002_EVENT_ID)) = ''N'' then',
-unistr('    raise_application_error(-20100, ''\0644\0627 \062A\0645\0644\0643 \0635\0644\0627\062D\064A\0629 \0639\0644\0649 \0647\0630\0647 \0627\0644\0645\0634\0627\0631\0643\0629'');'),
-'end if;'))
+'declare',
+'    l_emp number;',
+'begin',
+'    if :P2002_EVENT_ID is not null then',
+'        select EMPLOYEE_ID into l_emp from MOINFO_EVT_EVENTS where EVENT_ID = :P2002_EVENT_ID;',
+'        if MOINFO_EVT.CAN_SEE(l_emp) = ''N'' then',
+unistr('            raise_application_error(-20100, ''\0644\0627 \062A\0645\0644\0643 \0635\0644\0627\062D\064A\0629 \0639\0644\0649 \0647\0630\0647 \0627\0644\0645\0634\0627\0631\0643\0629'');'),
+'        end if;',
+'    end if;',
+'end;'))
 ,p_process_clob_language=>'PLSQL'
 ,p_error_display_location=>'INLINE_IN_NOTIFICATION'
 ,p_internal_uid=>930000000000000589
@@ -6931,9 +6938,6 @@ wwv_flow_imp_page.create_page_item(
 ,p_item_sequence=>40
 ,p_item_plug_id=>wwv_flow_imp.id(930000000000000849)
 ,p_item_source_plug_id=>wwv_flow_imp.id(930000000000000849)
-,p_item_default=>'(select UNIT_ID from MOINFO_EMPLOYEES where EMPLOYEE_ID = MOINFO_HR.MY_EMPLOYEE_ID)'
-,p_item_default_type=>'EXPRESSION'
-,p_item_default_language=>'PLSQL'
 ,p_prompt=>unistr('\0627\0644\0648\062D\062F\0629 \0627\0644\0645\0627\0644\0643\0629')
 ,p_source=>'OWNER_UNIT_ID'
 ,p_display_as=>'NATIVE_POPUP_LOV'
@@ -7100,11 +7104,28 @@ wwv_flow_imp_page.create_page_process(
 );
 wwv_flow_imp_page.create_page_process(
  p_id=>wwv_flow_imp.id(930000000000000864)
+,p_process_sequence=>20
+,p_process_point=>'BEFORE_HEADER'
+,p_process_type=>'NATIVE_PLSQL'
+,p_process_name=>'Default owner unit'
+,p_static_id=>'default-owner-unit-864'
+,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
+'if :P5002_DOCUMENT_ID is null and :P5002_OWNER_UNIT_ID is null then',
+'    for r in (select UNIT_ID from MOINFO_EMPLOYEES where EMPLOYEE_ID = MOINFO_HR.MY_EMPLOYEE_ID) loop',
+'        :P5002_OWNER_UNIT_ID := r.UNIT_ID;',
+'    end loop;',
+'end if;'))
+,p_process_clob_language=>'PLSQL'
+,p_error_display_location=>'INLINE_IN_NOTIFICATION'
+,p_internal_uid=>930000000000000864
+);
+wwv_flow_imp_page.create_page_process(
+ p_id=>wwv_flow_imp.id(930000000000000865)
 ,p_process_sequence=>30
 ,p_process_point=>'AFTER_SUBMIT'
 ,p_process_type=>'NATIVE_PLSQL'
 ,p_process_name=>'Store files'
-,p_static_id=>'store-files-864'
+,p_static_id=>'store-files-865'
 ,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
 'declare',
 '    l_n number;',
@@ -7115,12 +7136,12 @@ wwv_flow_imp_page.create_page_process(
 ,p_error_display_location=>'INLINE_IN_NOTIFICATION'
 ,p_process_when=>'CREATE,SAVE'
 ,p_process_when_type=>'REQUEST_IN_CONDITION'
-,p_internal_uid=>930000000000000864
+,p_internal_uid=>930000000000000865
 );
 wwv_flow_imp_page.create_page_plug(
- p_id=>wwv_flow_imp.id(930000000000000865)
+ p_id=>wwv_flow_imp.id(930000000000000866)
 ,p_plug_name=>unistr('\0645\0644\0641\0627\062A \0627\0644\0645\0633\062A\0646\062F')
-,p_static_id=>'r930000000000000865'
+,p_static_id=>'r930000000000000866'
 ,p_region_template_options=>'#DEFAULT#'
 ,p_escape_on_http_output=>'N'
 ,p_plug_template=>2103954283454391425
@@ -7147,7 +7168,7 @@ wwv_flow_imp_page.create_page_plug(
 ,p_prn_orientation=>'HORIZONTAL'
 );
 wwv_flow_imp_page.create_worksheet(
- p_id=>wwv_flow_imp.id(930000000000000866)
+ p_id=>wwv_flow_imp.id(930000000000000867)
 ,p_max_row_count=>'1000000'
 ,p_pagination_type=>'ROWS_X_TO_Y'
 ,p_pagination_display_pos=>'BOTTOM_RIGHT'
@@ -7157,10 +7178,10 @@ wwv_flow_imp_page.create_worksheet(
 ,p_show_notify=>'Y'
 ,p_download_formats=>'CSV:HTML:XLSX:PDF'
 ,p_enable_mail_download=>'Y'
-,p_internal_uid=>930000000000000866
+,p_internal_uid=>930000000000000867
 );
 wwv_flow_imp_page.create_worksheet_column(
- p_id=>wwv_flow_imp.id(930000000000000867)
+ p_id=>wwv_flow_imp.id(930000000000000868)
 ,p_db_column_name=>'ATTACHMENT_ID'
 ,p_display_order=>10
 ,p_column_identifier=>'A'
@@ -7172,7 +7193,7 @@ wwv_flow_imp_page.create_worksheet_column(
 ,p_use_as_row_header=>'N'
 );
 wwv_flow_imp_page.create_worksheet_column(
- p_id=>wwv_flow_imp.id(930000000000000868)
+ p_id=>wwv_flow_imp.id(930000000000000869)
 ,p_db_column_name=>'FILE_LINK'
 ,p_display_order=>20
 ,p_column_identifier=>'B'
@@ -7183,7 +7204,7 @@ wwv_flow_imp_page.create_worksheet_column(
 ,p_use_as_row_header=>'N'
 );
 wwv_flow_imp_page.create_worksheet_column(
- p_id=>wwv_flow_imp.id(930000000000000869)
+ p_id=>wwv_flow_imp.id(930000000000000870)
 ,p_db_column_name=>'FILE_SIZE_TEXT'
 ,p_display_order=>30
 ,p_column_identifier=>'C'
@@ -7193,7 +7214,7 @@ wwv_flow_imp_page.create_worksheet_column(
 ,p_use_as_row_header=>'N'
 );
 wwv_flow_imp_page.create_worksheet_column(
- p_id=>wwv_flow_imp.id(930000000000000870)
+ p_id=>wwv_flow_imp.id(930000000000000871)
 ,p_db_column_name=>'CREATED_BY_NAME'
 ,p_display_order=>40
 ,p_column_identifier=>'D'
@@ -7203,7 +7224,7 @@ wwv_flow_imp_page.create_worksheet_column(
 ,p_use_as_row_header=>'N'
 );
 wwv_flow_imp_page.create_worksheet_column(
- p_id=>wwv_flow_imp.id(930000000000000871)
+ p_id=>wwv_flow_imp.id(930000000000000872)
 ,p_db_column_name=>'CREATED_AT_TXT'
 ,p_display_order=>50
 ,p_column_identifier=>'E'
@@ -7213,16 +7234,16 @@ wwv_flow_imp_page.create_worksheet_column(
 ,p_use_as_row_header=>'N'
 );
 wwv_flow_imp_page.create_worksheet_rpt(
- p_id=>wwv_flow_imp.id(930000000000000872)
+ p_id=>wwv_flow_imp.id(930000000000000873)
 ,p_application_user=>'APXWS_DEFAULT'
 ,p_report_seq=>10
-,p_report_alias=>'873'
+,p_report_alias=>'874'
 ,p_status=>'PUBLIC'
 ,p_is_default=>'Y'
 ,p_report_columns=>'FILE_LINK:FILE_SIZE_TEXT:CREATED_BY_NAME:CREATED_AT_TXT:'
 );
 wwv_flow_imp_page.create_page_branch(
- p_id=>wwv_flow_imp.id(930000000000000874)
+ p_id=>wwv_flow_imp.id(930000000000000875)
 ,p_branch_name=>'Go To Page 5001'
 ,p_branch_action=>'f?p=&APP_ID.:5001:&SESSION.::&DEBUG.:::&success_msg=#SUCCESS_MSG#'
 ,p_branch_point=>'AFTER_PROCESSING'
@@ -7252,9 +7273,9 @@ wwv_flow_imp_page.create_page(
 ,p_protection_level=>'C'
 );
 wwv_flow_imp_page.create_page_plug(
- p_id=>wwv_flow_imp.id(930000000000000875)
+ p_id=>wwv_flow_imp.id(930000000000000876)
 ,p_plug_name=>unistr('\062A\0646\0632\064A\0644')
-,p_static_id=>'r930000000000000875'
+,p_static_id=>'r930000000000000876'
 ,p_region_template_options=>'#DEFAULT#'
 ,p_escape_on_http_output=>'Y'
 ,p_plug_template=>4075786578761660127
@@ -7266,10 +7287,10 @@ wwv_flow_imp_page.create_page_plug(
   'output_as', 'HTML')).to_clob
 );
 wwv_flow_imp_page.create_page_item(
- p_id=>wwv_flow_imp.id(930000000000000876)
+ p_id=>wwv_flow_imp.id(930000000000000877)
 ,p_name=>'P5003_ATTACHMENT_ID'
 ,p_item_sequence=>10
-,p_item_plug_id=>wwv_flow_imp.id(930000000000000875)
+,p_item_plug_id=>wwv_flow_imp.id(930000000000000876)
 ,p_use_cache_before_default=>'NO'
 ,p_source_type=>'ALWAYS_NULL'
 ,p_display_as=>'NATIVE_HIDDEN'
@@ -7278,17 +7299,17 @@ wwv_flow_imp_page.create_page_item(
   'value_protected', 'Y')).to_clob
 );
 wwv_flow_imp_page.create_page_process(
- p_id=>wwv_flow_imp.id(930000000000000877)
+ p_id=>wwv_flow_imp.id(930000000000000878)
 ,p_process_sequence=>10
 ,p_process_point=>'BEFORE_HEADER'
 ,p_process_type=>'NATIVE_PLSQL'
 ,p_process_name=>'Download'
-,p_static_id=>'download-877'
+,p_static_id=>'download-878'
 ,p_process_sql_clob=>wwv_flow_string.join(wwv_flow_t_varchar2(
 'MOINFO_FILES.DOWNLOAD(:P5003_ATTACHMENT_ID);'))
 ,p_process_clob_language=>'PLSQL'
 ,p_error_display_location=>'INLINE_IN_NOTIFICATION'
-,p_internal_uid=>930000000000000877
+,p_internal_uid=>930000000000000878
 );
 end;
 /

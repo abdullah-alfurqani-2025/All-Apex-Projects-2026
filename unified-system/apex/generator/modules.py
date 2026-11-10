@@ -350,8 +350,16 @@ def evt_pages():
     pages.append(p)
 
     p = Page(2002, 'مشاركة', authz='MOD_EVT', alias='EVENT')
-    guard(p, ":P2002_EVENT_ID is not null and MOINFO_EVT.CAN_SEE((select EMPLOYEE_ID from MOINFO_EVT_EVENTS where EVENT_ID = :P2002_EVENT_ID)) = 'N'",
-          'لا تملك صلاحية على هذه المشاركة')
+    p.plsql_process('Row access check', """declare
+    l_emp number;
+begin
+    if :P2002_EVENT_ID is not null then
+        select EMPLOYEE_ID into l_emp from MOINFO_EVT_EVENTS where EVENT_ID = :P2002_EVENT_ID;
+        if MOINFO_EVT.CAN_SEE(l_emp) = 'N' then
+            raise_application_error(-20100, 'لا تملك صلاحية على هذه المشاركة');
+        end if;
+    end if;
+end;""", point='BEFORE_HEADER', seq=1)
     r = p.form_region('مشاركة', 'MOINFO_EVT_EVENTS')
     p.item(r, 'P2002_EVENT_ID', display='HIDDEN', source='EVENT_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
     emp = p.item(r, 'P2002_EMPLOYEE_ID', label='الموظف', display='POPUP', source='EMPLOYEE_ID', source_region=r, dtype='NUMBER',
@@ -658,8 +666,7 @@ def att_pages():
     p.item(r, 'P5002_DOCUMENT_DATE', label='التاريخ', display='DATE', source='DOCUMENT_DATE', source_region=r, dtype='DATE',
            seq=30)
     p.item(r, 'P5002_OWNER_UNIT_ID', label='الوحدة المالكة', display='POPUP', source='OWNER_UNIT_ID', source_region=r,
-           dtype='NUMBER', lov='UNITS', null_text='', seq=40, new_line=False,
-           default_expr='(select UNIT_ID from MOINFO_EMPLOYEES where EMPLOYEE_ID = MOINFO_HR.MY_EMPLOYEE_ID)')
+           dtype='NUMBER', lov='UNITS', null_text='', seq=40, new_line=False)
     p.item(r, 'P5002_REMARKS', label='ملاحظات', display='TEXTAREA', source='REMARKS', source_region=r, seq=50)
     p.item(r, 'P5002_IS_ACTIVE', label='نشط', display='YESNO', source='IS_ACTIVE', source_region=r, default='Y', seq=60)
     p.item(r, 'P5002_FILES', label='إرفاق ملفات', display='FILE', seq=70, multiple=True)
@@ -672,6 +679,11 @@ def att_pages():
     p.button(r, 'CREATE', 'إضافة', position='CREATE', hot=True, seq=40, cond_item='P5002_DOCUMENT_ID',
              cond_type='ITEM_IS_NULL', db_action='INSERT')
     p.form_processes(r, 'Document')
+    p.plsql_process('Default owner unit', """if :P5002_DOCUMENT_ID is null and :P5002_OWNER_UNIT_ID is null then
+    for r in (select UNIT_ID from MOINFO_EMPLOYEES where EMPLOYEE_ID = MOINFO_HR.MY_EMPLOYEE_ID) loop
+        :P5002_OWNER_UNIT_ID := r.UNIT_ID;
+    end loop;
+end if;""", point='BEFORE_HEADER', seq=20)
     p.plsql_process('Store files', """declare
     l_n number;
 begin
