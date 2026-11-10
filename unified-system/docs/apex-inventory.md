@@ -222,7 +222,30 @@
 - الصفحات: 8001 المعدات، و8002 المعدة مع تسجيل الحركة وسجلها، و8003 الصرف والاستلام بالباركود، و8004 لدى المستلمين، و8005 سجل الحركات، و8006 النواقص، و8007/8008 قوائم المخزن.
 - الاختبار `tests/t02_std.sql` في SQL Commands. لا يمكن إنشاء جلسة APEX من SQL Commands (Access to session state is disabled)، فالاختبار يضيف مستخدم المساحة مديرًا مؤقتًا ثم يتراجع.
 - نفّذ عبدالله 11 والاختبار وملفات التطبيق الثلاثة في 10 نوفمبر.
-- الخطوة التالية: القسم التجاري ADV (f400)، ثم OMI وNWS.
+
+## السكربت 12: القسم التجاري (ADV) — 10 نوفمبر 2026
+
+- المساران القديمان (الشركات المباشرة، والوكالات وعملاؤها) دُمجا: `MOINFO_ADV_ACCOUNTS` (شركة أو وكالة، والشركة قد تمثّلها وكالة AGENCY_ID)، و`MOINFO_ADV_CONTACTS` لأي حساب، و`MOINFO_ADV_DEALS` الفرص الإعلانية بدل ADVERTISEMENT/ADVERTISEMENTS، و`MOINFO_ADV_ACTIVITIES` سجل متابعة بدل حقل FOLLOWUP.
+- القوائم: ADV_SECTOR، وADV_INDUSTRY، وADV_MEDIA، وADV_DEAL_STATUS (WON وLOST تغلق الفرصة)، وADV_ACTIVITY_TYPE.
+- Triggers: حساب الوكالة بلا وكيل، والمعلن شركة والوكالة وكالة (والوكالة الافتراضية وكيل المعلن)، وجهة الاتصال من المعلن أو الوكالة. التحقق يتم عند تغيّر الحقل فقط لتجنّب ORA-04091 مع الحذف المتسلسل.
+- حزمة `MOINFO_ADV`: CAN_SEE (المندوب المسؤول أو المنشئ ثم نطاق الوحدة)، وIS_MANAGER، وADD_ACTIVITY.
+- الصفحات 9001–9009، والاختبار `tests/t03_adv.sql`. نفّذه عبدالله.
+
+## السكربت 13: تسجيل البصمة (OMI) — 10 نوفمبر 2026
+
+- `MOINFO_OMI_PERSONS` بديل MOI_EMPLOYEES (ربط اختياري بموظف النواة، والرقم المدني فريد)، مع IS_REGISTERED وREGISTERED_AT ونقطة التسجيل والجهاز، وIS_UPLOADED وUPLOADED_AT للرفع إلى Alpeta.
+- `MOINFO_OMI_TERMINALS` يدمج MOI_TERMINALS وMOI_FIXED_TERMINALS. والقوائم OMI_SITE (مسقط، صلالة) وOMI_REG_POINT.
+- حزمة `MOINFO_OMI`: REGISTER_PERSON، وUNREGISTER_PERSON، وMARK_UPLOADED، وMARK_ALL_UPLOADED. وViews: V_PERSONS، وV_TERMINALS، وV_DAILY، وV_SUMMARY.
+- اسم الوحدة في النواة صار «تسجيل البصمة».
+- الصفحات 10001–10011 (منها التسجيل السريع 10011)، والاختبار `tests/t04_omi.sql`. نفّذه عبدالله.
+
+## السكربت 14: دليل الجهات (NWS) — 10 نوفمبر 2026
+
+- عشرون جدولًا في f1200 صارت جدولين: `MOINFO_NWS_ENTITIES` شجرة جهات (وزارات، وأقسام، ومكاتب في المحافظات والولايات، وسفارات في السلطنة، وسفارات عمانية، ومؤسسات، ووسائل إعلام)، و`MOINFO_NWS_CONTACTS` جهات الاتصال لجهة أو لدولة.
+- الدول والمحافظات والولايات من النواة. أُضيف للنواة عمود `MOINFO_COUNTRIES.REGION_ID` (القائمة WORLD_REGION) وView `MOINFO_V_COUNTRIES`، وصفحة الدول 62/63 تعرض الإقليم.
+- Views: V_ENTITIES (المسار الكامل والعمق)، وV_CONTACTS (الدليل). وحزمة `MOINFO_NWS` (CAN_EDIT، وIS_MANAGER).
+- الصفحات 11001–11007، والاختبار `tests/t05_nws.sql`.
+- بهذا اكتملت كل الوحدات. ملف `f145032_modules2.sql` قرب 466KB.
 
 ## التوجه المبدئي
 

@@ -22,6 +22,9 @@
 | `sql/09a_prc_fix_lock.sql` | إصلاح Trigger قفل الأصناف لمن شغّل النسخة الأولى من 09 |
 | `sql/10_moinfo_error_handler.sql` | دالة رسائل الأخطاء العربية للتطبيق |
 | `sql/11_moinfo_std.sql` | مخزن الاستوديو بديل StudioStore (f500) |
+| `sql/12_moinfo_adv.sql` | القسم التجاري بديل f400 |
+| `sql/13_moinfo_omi.sql` | تسجيل البصمة بديل OmanInfo (f1000) |
+| `sql/14_moinfo_nws.sql` | دليل الجهات بديل News (f1200) |
 | `apex/f145032.sql` | التطبيق: النواة والمكونات المشتركة وصفحات الإدارة. تثبيته يستبدل التطبيق 145032 كاملًا |
 | `apex/f145032_modules.sql` و`f145032_modules2.sql` | صفحات الوحدات، تُثبَّت بالترتيب بعد f145032.sql دائمًا |
 | `apex/generator/` | سكربتات Python التي تولّد ملفي التطبيق |
