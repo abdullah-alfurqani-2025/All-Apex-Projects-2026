@@ -1,6 +1,6 @@
 -- اختبار وحدة مخزن الاستوديو (STD) بعد تشغيل 11_moinfo_std.sql
--- يُشغَّل في SQL Commands كاملًا مرة واحدة. ينشئ جلسة APEX باسم ADMIN ليعمل التحقق من الصلاحيات،
--- ثم يتراجع عن كل البيانات (ROLLBACK) ويعيد Sequence الباركود إلى بدايته.
+-- يُشغَّل في SQL Commands كاملًا مرة واحدة. يضيف مستخدم المساحة الحالي مديرًا مؤقتًا في MOINFO_USERS
+-- ليعمل التحقق من الصلاحيات، ثم يتراجع عن كل البيانات (ROLLBACK) ويعيد Sequence الباركود إلى بدايته.
 -- النتيجة المتوقعة: كل الأسطر PASS.
 declare
     e number; it number; n number; x varchar2(400); b varchar2(50);
@@ -8,12 +8,15 @@ declare
     begin
         dbms_output.put_line(case when c then 'PASS ' else 'FAIL ' end || p);
     end;
-    procedure expect(p varchar2, code number) is
+    procedure expect(p varchar2, code number, got number) is
     begin
-        ok(p || ' (' || sqlcode || ')', sqlcode = code);
+        ok(p || ' (' || got || ')', got = code);
     end;
 begin
-    apex_session.create_session(p_app_id => 145032, p_page_id => 1, p_username => 'ADMIN');
+    -- مدير مؤقت باسم مستخدم SQL Commands الحالي (يُحذف مع ROLLBACK في النهاية)
+    insert into moinfo_users (username, display_name, is_sys_admin)
+    values (upper(trim(v('APP_USER'))), 'ZZ اختبار', 'Y');
+    ok('test user ' || v('APP_USER'), moinfo_std.is_manager = 'Y');
 
     for o in (select object_name || ' ' || object_type t from user_objects
                where object_name like 'MOINFO\_STD%' escape '\' and status <> 'VALID') loop
@@ -31,17 +34,17 @@ begin
     begin
         update moinfo_std_items set qty_in_stock = 9 where item_id = it;
         ok('direct qty update blocked', false);
-    exception when others then expect('direct qty update blocked', -20082);
+    exception when others then expect('direct qty update blocked', -20082, sqlcode);
     end;
 
     moinfo_std.issue(it, 2, e);
     select qty_in_stock into n from moinfo_std_items where item_id = it; ok('issue 2 -> stock ' || n, n = 3);
     begin moinfo_std.issue(it, 10, e); ok('over-issue blocked', false);
-    exception when others then expect('over-issue blocked', -20072); end;
+    exception when others then expect('over-issue blocked', -20072, sqlcode); end;
     begin moinfo_std.issue(it, 1); ok('issue needs recipient', false);
-    exception when others then expect('issue needs recipient', -20075); end;
+    exception when others then expect('issue needs recipient', -20075, sqlcode); end;
     begin moinfo_std.return_item(it, 3, e); ok('over-return blocked', false);
-    exception when others then expect('over-return blocked', -20077); end;
+    exception when others then expect('over-return blocked', -20077, sqlcode); end;
 
     moinfo_std.return_item(it, 1, e);
     select qty_out into n from moinfo_std_v_outstanding where item_id = it and employee_id = e; ok('outstanding 1', n = 1);
@@ -50,7 +53,7 @@ begin
     select is_overdue into x from moinfo_std_v_outstanding where item_id = it and employee_id is null; ok('not overdue', x = 'N');
 
     begin moinfo_std.adjust(it, 10, null); ok('adjust needs reason', false);
-    exception when others then expect('adjust needs reason', -20080); end;
+    exception when others then expect('adjust needs reason', -20080, sqlcode); end;
     moinfo_std.adjust(it, 10, 'ZZ جرد');
     select qty_in_stock || '/' || qty_out || '/' || qty_total into x from moinfo_std_v_items where item_id = it;
     ok('after adjust ' || x, x = '10/2/12');
@@ -70,5 +73,4 @@ begin
     execute immediate 'drop sequence MOINFO_STD_BARCODE_SEQ';
     execute immediate 'create sequence MOINFO_STD_BARCODE_SEQ start with 100001 increment by 1 nocache';
     execute immediate 'alter trigger MOINFO_STD_ITEMS_RULES_BIU compile';
-    apex_session.delete_session;
 end;
