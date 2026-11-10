@@ -1561,6 +1561,7 @@ wwv_flow_imp_page.create_page_plug(
 ,p_plug_template=>2677445476673898083
 ,p_plug_display_sequence=>10
 ,p_plug_display_point=>'REGION_POSITION_01'
+,p_plug_item_display_point=>'ABOVE'
 ,p_plug_source=>wwv_flow_string.join(wwv_flow_t_varchar2(
 unistr('<p>\0645\0631\062D\0628\064B\0627 &APP_USER.</p>')))
 ,p_plug_query_num_rows=>15
@@ -1620,6 +1621,7 @@ wwv_flow_imp_page.create_page_plug(
 ,p_escape_on_http_output=>'Y'
 ,p_plug_template=>2677585639786677191
 ,p_plug_display_sequence=>10
+,p_plug_item_display_point=>'ABOVE'
 ,p_plug_query_num_rows=>15
 ,p_attributes=>wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
   'expand_shortcuts', 'N',
@@ -1724,6 +1726,7 @@ wwv_flow_imp_page.create_page_plug(
 ,p_escape_on_http_output=>'Y'
 ,p_plug_template=>4075786578761660127
 ,p_plug_display_sequence=>10
+,p_plug_item_display_point=>'ABOVE'
 ,p_plug_source=>wwv_flow_string.join(wwv_flow_t_varchar2(
 unistr('<p>\064A\062C\0628 \0623\0646 \062A\062A\0643\0648\0646 \0643\0644\0645\0629 \0627\0644\0645\0631\0648\0631 \0645\0646 8 \0623\062D\0631\0641 \0639\0644\0649 \0627\0644\0623\0642\0644\060C \0648\062A\062D\062A\0648\064A \0639\0644\0649 \062D\0631\0648\0641 \0648\0623\0631\0642\0627\0645.</p>')))
 ,p_plug_query_num_rows=>15

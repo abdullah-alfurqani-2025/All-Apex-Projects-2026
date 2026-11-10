@@ -227,6 +227,7 @@ class Page:
             ("p_plug_template", str(template)),
             ("p_plug_display_sequence", str(seq)),
             ("p_plug_display_point", lit(position) if position else None),
+            ("p_plug_item_display_point", lit('ABOVE')),
             ("p_plug_source", lines(html) if html else None),
             ("p_plug_query_num_rows", "15"),
             ("p_plug_display_condition_type", lit(cond[0]) if cond else None),
