@@ -396,7 +396,7 @@ class Page:
              seq=10, required=False, pk=False, lov=None, null_text=None, maxlen=None, width=None, height=None,
              new_line=True, default=None, cond=None, read_only=False, help=None, pwd_autocomplete=None,
              placeholder=None, icon=None, label_template=None, default_expr=None, cascade=None, multiple=False,
-             submit_on_enter=False):
+             submit_on_enter=False, submit_on_change=False):
         i = nid()
         da = {
             'TEXT': 'NATIVE_TEXT_FIELD', 'TEXTAREA': 'NATIVE_TEXTAREA', 'SELECT': 'NATIVE_SELECT_LIST',
@@ -410,7 +410,8 @@ class Page:
         elif display == 'TEXTAREA':
             a = {'auto_height': 'N', 'character_counter': 'N', 'resizable': 'Y', 'trim_spaces': 'BOTH'}
         elif display == 'SELECT':
-            a = {'execute_validations': 'Y', 'page_action_on_selection': 'NONE'}
+            a = {'execute_validations': 'N' if submit_on_change else 'Y',
+                 'page_action_on_selection': 'SUBMIT' if submit_on_change else 'NONE'}
         elif display == 'POPUP':
             a = {'case_sensitive': 'N', 'display_as': 'POPUP', 'fetch_on_search': 'N', 'initial_fetch': 'FIRST_ROWSET',
                  'manual_entry': 'N', 'match_type': 'CONTAINS', 'min_chars': '0'}

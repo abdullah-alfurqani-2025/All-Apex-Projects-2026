@@ -8,7 +8,7 @@ DML = 'CREATE,SAVE,DELETE'
 # ------------------------------------------------------------------------------
 def authorizations():
     calls = []
-    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD', 'PRC', 'STD', 'ADV']:
+    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD', 'PRC', 'STD', 'ADV', 'OMI']:
         calls.append(authorization(f'{code}_MANAGER', f"return MOINFO_SEC.HAS_ROLE('{code}', 'MANAGER');",
                                    'هذه الصفحة للمشرفين في الوحدة'))
     calls.append(authorization('CAT_MANAGER', """return MOINFO_SEC.IS_ADMIN
@@ -19,6 +19,8 @@ def authorizations():
                                'هذه الصفحة لقسم المشتريات'))
     calls.append(authorization('STD_USER', "return MOINFO_SEC.HAS_ROLE('STD', 'USER');",
                                'هذه الصفحة لمن يصرف ويستلم من المخزن'))
+    calls.append(authorization('OMI_USER', "return MOINFO_SEC.HAS_ROLE('OMI', 'USER');",
+                               'هذه الصفحة لمن يسجّل البصمة'))
     calls.append(authorization('HAS_EMPLOYEE', 'return MOINFO_HR.MY_EMPLOYEE_ID is not null;',
                                'حسابك غير مرتبط بموظف'))
     return calls
@@ -35,7 +37,8 @@ def lovs():
               'HR_EMP_STATUS', 'EVT_TYPE', 'MED_EVENT', 'MED_EVENT_TYPE', 'TSK_STATUS', 'TSK_TYPE',
               'TSK_CATEGORY', 'ATT_CATEGORY', 'HD_DEVICE_STATUS', 'HD_REQUEST_STATUS', 'PRC_REQUEST_STATUS',
               'STD_ITEM_STATUS', 'STD_LOCATION', 'STD_BIN',
-              'ADV_SECTOR', 'ADV_INDUSTRY', 'ADV_MEDIA', 'ADV_DEAL_STATUS', 'ADV_ACTIVITY_TYPE']:
+              'ADV_SECTOR', 'ADV_INDUSTRY', 'ADV_MEDIA', 'ADV_DEAL_STATUS', 'ADV_ACTIVITY_TYPE',
+              'OMI_SITE', 'OMI_REG_POINT']:
         out.append(lookup_lov(t))
     out.append(lov('COUNTRIES', "select NAME_AR d, COUNTRY_ID r from MOINFO_COUNTRIES where IS_ACTIVE = 'Y' order by SORT_ORDER, NAME_AR"))
     out.append(lov('WILAYATS', """select g.NAME_AR || ' - ' || w.NAME_AR d, w.WILAYAT_ID r
@@ -85,6 +88,9 @@ def lovs():
     out.append(static_lov('ADV_LIST_TYPES', [('القطاع', 'ADV_SECTOR'), ('النشاط التجاري', 'ADV_INDUSTRY'),
                                              ('الوسيلة الإعلامية', 'ADV_MEDIA'), ('حالة الفرصة', 'ADV_DEAL_STATUS'),
                                              ('نوع المتابعة', 'ADV_ACTIVITY_TYPE')]))
+    out.append(lov('OMI_TERMINALS', """select nvl(NAME, SERIAL_NO) || nvl2(REG_POINT_AR, ' - ' || REG_POINT_AR, '') d, TERMINAL_ID r
+  from MOINFO_OMI_V_TERMINALS where IS_ACTIVE = 'Y' order by NAME, SERIAL_NO"""))
+    out.append(static_lov('OMI_LIST_TYPES', [('الموقع', 'OMI_SITE'), ('نقطة التسجيل', 'OMI_REG_POINT')]))
     out.append(static_lov('PRC_ITEM_DECISION', [('معتمد', 'Y'), ('مرفوض', 'N')]))
     out.append(static_lov('MED_CREW_ROLE', [('مصور', 'PHOTOGRAPHER'), ('مونتاج', 'EDITOR'), ('مراسل', 'REPORTER')]))
     out.append(static_lov('TSK_PRIORITY', [('منخفضة', 'LOW'), ('عادية', 'NORMAL'), ('عالية', 'HIGH'), ('عاجلة', 'URGENT')]))
@@ -145,6 +151,16 @@ MODULE_MENU = [
         ('الإحصائيات', 9007, '9007', 'MOD_ADV'),
         ('قوائم القسم التجاري', 9008, '9008,9009', 'ADV_MANAGER'),
     ]),
+    ('OMI', 'تسجيل البصمة', 'fa-hand-pointer-o', [
+        ('تسجيل سريع', 10011, '10011', 'OMI_USER'),
+        ('الأشخاص', 10001, '10001,10002', 'MOD_OMI'),
+        ('تسجيل اليوم', 10003, '10003', 'MOD_OMI'),
+        ('لم تُسجَّل بصمتهم', 10005, '10005', 'MOD_OMI'),
+        ('لم يُرفعوا إلى Alpeta', 10004, '10004', 'MOD_OMI'),
+        ('أجهزة البصمة', 10006, '10006,10007', 'MOD_OMI'),
+        ('الملخص', 10008, '10008', 'MOD_OMI'),
+        ('القوائم', 10009, '10009,10010', 'OMI_MANAGER'),
+    ]),
     ('CAT', 'الكتالوج المشترك', 'fa-tags', [
         ('أنواع المنتجات', 100, '100,101', 'CAT_MANAGER'),
         ('الماركات', 102, '102,103', 'CAT_MANAGER'),
@@ -178,6 +194,7 @@ def home_cards():
         'PRC': 'طلبات الشراء والاعتماد والشراء والاستلام',
         'STD': 'المعدات وصرفها واستلامها والجرد',
         'ADV': 'المعلنون والوكالات والفرص الإعلانية ومتابعتها',
+        'OMI': 'تسجيل البصمات ورفعها إلى Alpeta وأجهزة البصمة',
         'CAT': 'الماركات والموديلات والموردون وأنواع الضمان',
     }
     out = [dict(text='بياناتي', page=1010, icon='fa-user-circle', authz='HAS_EMPLOYEE', desc='بياناتك الوظيفية والشخصية',
@@ -1836,7 +1853,213 @@ def adv_pages():
         'ADV_MANAGER')
     return pages
 
+# ------------------------------------------------------------------------------
+# OMI (10000)
+# ------------------------------------------------------------------------------
+OMI_COLS = [('PERSON_ID', None, 'NUMBER'), ('EMP_NO', 'الرقم الوظيفي', 'STRING'), ('WORK_ID', 'رقم العمل', 'STRING'),
+            ('NAME_AR', 'الاسم', 'STRING'), ('NAME_EN', 'الاسم بالإنجليزية', 'STRING'), ('CIVIL_NO', 'الرقم المدني', 'STRING'),
+            ('SITE_AR', 'الموقع', 'STRING'), ('REGISTERED_AR', 'البصمة', 'STRING'), ('REGISTERED_AT_TXT', 'وقت التسجيل', 'STRING'),
+            ('REG_POINT_AR', 'نقطة التسجيل', 'STRING'), ('TERMINAL_NAME', 'الجهاز', 'STRING'),
+            ('UPLOADED_AR', 'Alpeta', 'STRING'), ('REMARKS', 'ملاحظات', 'STRING')]
+OMI_SEL = """select PERSON_ID, EMP_NO, WORK_ID, NAME_AR, NAME_EN, CIVIL_NO, SITE_AR, REGISTERED_AR,
+       to_char(REGISTERED_AT, 'DD/MM/YYYY HH24:MI') as REGISTERED_AT_TXT, REG_POINT_AR, TERMINAL_NAME, UPLOADED_AR, REMARKS
+  from MOINFO_OMI_V_PERSONS"""
+
+def omi_pages():
+    pages = []
+    can_reg = "MOINFO_OMI.CAN_REGISTER = 'Y'"
+    mgr = "MOINFO_OMI.IS_MANAGER = 'Y'"
+
+    def list_page(pid, title, alias, where, order='NAME_AR', extra=None):
+        p = Page(pid, title, authz='MOD_OMI', alias=alias)
+        reg = p.ir_region(title, OMI_SEL + "\n where IS_ACTIVE = 'Y'" + (f"\n   and {where}" if where else '') + f"\n order by {order}",
+                          OMI_COLS, pk='PERSON_ID', link_page=10002, link_item='P10002_PERSON_ID')
+        if extra:
+            extra(p, reg)
+        return p
+
+    def add_btn(p, reg):
+        p.button(reg, 'CREATE', 'شخص جديد', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+                 redirect='f?p=&APP_ID.:10002:&SESSION.::&DEBUG.:10002::', icon='fa-plus',
+                 cond_type='EXPRESSION', cond_item=can_reg, cond_lang='PLSQL')
+    pages.append(list_page(10001, 'الأشخاص', 'OMI-PERSONS', None, extra=add_btn))
+    pages.append(list_page(10003, 'تسجيل اليوم', 'OMI-TODAY', "trunc(REGISTERED_AT) = trunc(sysdate)", 'REGISTERED_AT desc'))
+    pages.append(list_page(10005, 'لم تُسجَّل بصمتهم', 'OMI-NOT-REGISTERED', "IS_REGISTERED = 'N'"))
+
+    def upload_all(p, reg):
+        br = p.static_region('تأكيد الرفع', None, seq=5, cond=('EXPRESSION', mgr, 'PLSQL'))
+        p.item(br, 'P10004_SITE_ID', label='الموقع', display='SELECT', dtype='NUMBER', lov='LK_OMI_SITE',
+               null_text='- كل المواقع -', seq=10, submit_on_change=True)
+        b = p.button(br, 'UPLOAD_ALL', 'تأكيد رفع كل المسجّلين إلى Alpeta', position='NEXT', hot=True, seq=10,
+                     icon='fa-cloud-upload', confirm='تأكيد أن بصمات كل المعروضين رُفعت إلى Alpeta؟', exec_val=False)
+        p.plsql_process('Upload all', """declare
+    l_n number;
+begin
+    l_n := MOINFO_OMI.MARK_ALL_UPLOADED(:P10004_SITE_ID);
+    apex_application.g_print_success_message := 'تم تأكيد رفع ' || l_n || ' شخص';
+end;""", seq=10, when_button=b)
+        p.branch(10004, seq=100)
+    pages.append(list_page(10004, 'مسجّلون لم يُرفعوا إلى Alpeta', 'OMI-NOT-UPLOADED',
+                           "IS_REGISTERED = 'Y' and IS_UPLOADED = 'N'\n   and (:P10004_SITE_ID is null or SITE_ID = :P10004_SITE_ID)",
+                           'REGISTERED_AT', upload_all))
+
+    # 10002 person
+    p = Page(10002, 'شخص', authz='MOD_OMI', alias='OMI-PERSON')
+    r = p.form_region('شخص', 'MOINFO_OMI_PERSONS')
+    p.item(r, 'P10002_PERSON_ID', display='HIDDEN', source='PERSON_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
+    p.item(r, 'P10002_EMPLOYEE_ID', label='موظف في النظام', display='POPUP', source='EMPLOYEE_ID', source_region=r,
+           dtype='NUMBER', lov='EMPLOYEES', null_text='', seq=10,
+           help='اختياري. إن اخترت موظفًا وتركت الاسم والرقم فارغين أُخذا منه')
+    p.item(r, 'P10002_NAME_AR', label='الاسم', source='NAME_AR', source_region=r, maxlen=200, seq=20)
+    p.item(r, 'P10002_NAME_EN', label='الاسم بالإنجليزية', source='NAME_EN', source_region=r, maxlen=200, seq=30,
+           new_line=False)
+    p.item(r, 'P10002_EMP_NO', label='الرقم الوظيفي', source='EMP_NO', source_region=r, maxlen=50, seq=40)
+    p.item(r, 'P10002_WORK_ID', label='رقم العمل', source='WORK_ID', source_region=r, maxlen=50, seq=50, new_line=False)
+    p.item(r, 'P10002_CIVIL_NO', label='الرقم المدني', source='CIVIL_NO', source_region=r, maxlen=50, seq=60,
+           new_line=False)
+    p.item(r, 'P10002_SITE_ID', label='الموقع', display='SELECT', source='SITE_ID', source_region=r, dtype='NUMBER',
+           lov='LK_OMI_SITE', null_text='- -', seq=70)
+    p.item(r, 'P10002_STATUS_TXT', label='الحالة', display='DISPLAY', seq=80, new_line=False,
+           cond=('ITEM_IS_NOT_NULL', 'P10002_PERSON_ID'))
+    p.item(r, 'P10002_REMARKS', label='ملاحظات', source='REMARKS', source_region=r, maxlen=500, seq=90)
+    p.item(r, 'P10002_IS_ACTIVE', label='نشط', display='YESNO', source='IS_ACTIVE', source_region=r, default='Y', seq=100)
+    p.plsql_process('Load status', """for x in (select REGISTERED_AR, REGISTERED_AT, REG_POINT_AR, TERMINAL_NAME, UPLOADED_AR, UPLOADED_AT
+            from MOINFO_OMI_V_PERSONS where PERSON_ID = :P10002_PERSON_ID) loop
+    :P10002_STATUS_TXT := x.REGISTERED_AR
+        || nvl2(x.REGISTERED_AT, ' ' || to_char(x.REGISTERED_AT, 'DD/MM/YYYY HH24:MI'), '')
+        || nvl2(x.REG_POINT_AR, ' - ' || x.REG_POINT_AR, '') || nvl2(x.TERMINAL_NAME, ' / ' || x.TERMINAL_NAME, '')
+        || '، ' || x.UPLOADED_AR || nvl2(x.UPLOADED_AT, ' ' || to_char(x.UPLOADED_AT, 'DD/MM/YYYY'), '');
+end loop;""", point='BEFORE_HEADER', seq=20, cond=('ITEM_IS_NOT_NULL', 'P10002_PERSON_ID'))
+    p.validation('Name or employee', 'EXPRESSION', ':P10002_NAME_AR is not null or :P10002_EMPLOYEE_ID is not null',
+                 'اكتب الاسم أو اختر الموظف', seq=10, expr2='PLSQL')
+    p.button(r, 'BACK', 'رجوع', action='REDIRECT_PAGE', position='CLOSE', seq=10,
+             redirect='f?p=&APP_ID.:10001:&SESSION.::&DEBUG.:::', exec_val=False)
+    delete = p.button(r, 'DELETE', 'حذف', position='DELETE', seq=20, cond_type='EXPRESSION',
+                      cond_item=f":P10002_PERSON_ID is not null and {mgr}", cond_lang='PLSQL',
+                      db_action='DELETE', confirm='حذف هذا الشخص؟', exec_val=False)
+    p.button(r, 'SAVE', 'حفظ', position='CHANGE', hot=True, seq=30, cond_type='EXPRESSION',
+             cond_item=f":P10002_PERSON_ID is not null and {can_reg}", cond_lang='PLSQL', db_action='UPDATE')
+    p.button(r, 'CREATE', 'إضافة', position='CREATE', hot=True, seq=40, cond_type='EXPRESSION',
+             cond_item=f":P10002_PERSON_ID is null and {can_reg}", cond_lang='PLSQL', db_action='INSERT')
+    p.form_processes(r, 'Person', dml_cond=DML, success='تم الحفظ')
+    rr = p.static_region('البصمة', None, seq=20,
+                         cond=('EXPRESSION', f":P10002_PERSON_ID is not null and {can_reg}", 'PLSQL'))
+    p.item(rr, 'P10002_REG_POINT_ID', label='نقطة التسجيل', display='SELECT', dtype='NUMBER', lov='LK_OMI_REG_POINT',
+           null_text='- -', seq=10)
+    p.item(rr, 'P10002_TERMINAL_ID', label='الجهاز', display='SELECT', dtype='NUMBER', lov='OMI_TERMINALS',
+           null_text='- -', seq=20, new_line=False)
+    q = lambda w: f"select 1 from MOINFO_OMI_PERSONS where PERSON_ID = :P10002_PERSON_ID and {w}"
+    regb = p.button(rr, 'REGISTER', 'تسجيل البصمة الآن', position='NEXT', hot=True, seq=10, icon='fa-hand-pointer-o',
+                    cond_type='EXISTS', cond_item=q("IS_REGISTERED = 'N'"), exec_val=False)
+    unb = p.button(rr, 'UNREGISTER', 'إلغاء التسجيل', position='NEXT', seq=20, icon='fa-undo',
+                   cond_type='EXISTS', cond_item=q("IS_REGISTERED = 'Y'"), confirm='إلغاء تسجيل البصمة؟',
+                   exec_val=False)
+    upb = p.button(rr, 'UPLOAD', 'تأكيد الرفع إلى Alpeta', position='NEXT', seq=30, icon='fa-cloud-upload',
+                   cond_type='EXISTS', cond_item=q(f"IS_REGISTERED = 'Y' and IS_UPLOADED = 'N' and {mgr}"),
+                   exec_val=False)
+    p.plsql_process('Register', "MOINFO_OMI.REGISTER_PERSON(:P10002_PERSON_ID, :P10002_REG_POINT_ID, :P10002_TERMINAL_ID);",
+                    seq=30, when_button=regb, success='سُجّلت البصمة')
+    p.plsql_process('Unregister', "MOINFO_OMI.UNREGISTER_PERSON(:P10002_PERSON_ID);", seq=31, when_button=unb,
+                    success='أُلغي التسجيل')
+    p.plsql_process('Upload', "MOINFO_OMI.MARK_UPLOADED(:P10002_PERSON_ID);", seq=32, when_button=upb,
+                    success='أُكّد الرفع إلى Alpeta')
+    p.branch(10001, seq=10, when_button=delete)
+    p.branch(10002, seq=100, items=('P10002_PERSON_ID', '&P10002_PERSON_ID.'))
+    pages.append(p)
+
+    # 10011 quick registration
+    p = Page(10011, 'تسجيل سريع', authz='OMI_USER', alias='OMI-QUICK')
+    sr = p.static_region('البحث عن الشخص', None, seq=10)
+    p.item(sr, 'P10011_CODE', label='الرقم المدني أو الوظيفي أو رقم العمل', seq=10, submit_on_enter=True, maxlen=50,
+           help='اكتب الرقم ثم اضغط Enter')
+    p.item(sr, 'P10011_PERSON_ID', display='HIDDEN', dtype='NUMBER', seq=20)
+    p.item(sr, 'P10011_INFO', label='الشخص', display='DISPLAY', seq=30, cond=('ITEM_IS_NOT_NULL', 'P10011_CODE'))
+    p.item(sr, 'P10011_REG_POINT_ID', label='نقطة التسجيل', display='SELECT', dtype='NUMBER', lov='LK_OMI_REG_POINT',
+           null_text='- -', seq=40, help='تبقى كما هي للتسجيل التالي')
+    p.item(sr, 'P10011_TERMINAL_ID', label='الجهاز', display='SELECT', dtype='NUMBER', lov='OMI_TERMINALS',
+           null_text='- -', seq=50, new_line=False)
+    p.plsql_process('Find person', """:P10011_PERSON_ID := null;
+:P10011_INFO := 'لا يوجد شخص بهذا الرقم';
+for x in (select PERSON_ID, NAME_AR, EMP_NO, CIVIL_NO, SITE_AR, REGISTERED_AR, REGISTERED_AT, UPLOADED_AR
+            from MOINFO_OMI_V_PERSONS
+           where IS_ACTIVE = 'Y'
+             and (CIVIL_NO = trim(:P10011_CODE) or upper(EMP_NO) = upper(trim(:P10011_CODE))
+                  or upper(WORK_ID) = upper(trim(:P10011_CODE)))
+           order by PERSON_ID
+           fetch first 1 row only) loop
+    :P10011_PERSON_ID := x.PERSON_ID;
+    :P10011_INFO := x.NAME_AR || ' - ' || nvl(x.EMP_NO, x.CIVIL_NO) || nvl2(x.SITE_AR, ' - ' || x.SITE_AR, '')
+        || ' - ' || x.REGISTERED_AR || nvl2(x.REGISTERED_AT, ' ' || to_char(x.REGISTERED_AT, 'DD/MM/YYYY HH24:MI'), '')
+        || '، ' || x.UPLOADED_AR;
+end loop;""", point='BEFORE_HEADER', seq=10, cond=('ITEM_IS_NOT_NULL', 'P10011_CODE'))
+    qb = p.button(sr, 'REGISTER', 'تسجيل البصمة', position='NEXT', hot=True, seq=10, icon='fa-hand-pointer-o',
+                  cond_type='EXISTS', cond_item="""select 1 from MOINFO_OMI_PERSONS
+ where PERSON_ID = :P10011_PERSON_ID and IS_REGISTERED = 'N'""")
+    p.plsql_process('Register', """MOINFO_OMI.REGISTER_PERSON(:P10011_PERSON_ID, :P10011_REG_POINT_ID, :P10011_TERMINAL_ID);
+:P10011_CODE := null;""", seq=10, when_button=qb, success='سُجّلت البصمة')
+    p.ir_region('سُجّلوا اليوم', OMI_SEL + "\n where trunc(REGISTERED_AT) = trunc(sysdate)\n order by REGISTERED_AT desc",
+                OMI_COLS, pk='PERSON_ID', link_page=10002, link_item='P10002_PERSON_ID', seq=20)
+    p.branch(10011, seq=100)
+    pages.append(p)
+
+    # 10006/10007 terminals
+    pages += crud(10006, 10007, 'أجهزة البصمة', 'جهاز بصمة', 'MOINFO_OMI_TERMINALS', 'TERMINAL_ID',
+        f"""select TERMINAL_ID, NAME, SERIAL_NO, MAC_ADDRESS, IP_ADDRESS, SITE_AR, REG_POINT_AR, LOCATION_DESC,
+       {YN.format(c='IS_FIXED')} as IS_FIXED_AR, {YN.format(c='IS_CONNECTED')} as IS_CONNECTED_AR, PERSONS_COUNT,
+       {YN.format(c='IS_ACTIVE')} as IS_ACTIVE_AR
+  from MOINFO_OMI_V_TERMINALS""",
+        [('TERMINAL_ID', None, 'NUMBER'), ('NAME', 'الاسم', 'STRING'), ('SERIAL_NO', 'الرقم التسلسلي', 'STRING'),
+         ('MAC_ADDRESS', 'MAC', 'STRING'), ('IP_ADDRESS', 'IP', 'STRING'), ('SITE_AR', 'الموقع', 'STRING'),
+         ('REG_POINT_AR', 'نقطة التسجيل', 'STRING'), ('LOCATION_DESC', 'المكان', 'STRING'),
+         ('IS_FIXED_AR', 'ثابت', 'STRING'), ('IS_CONNECTED_AR', 'متصل', 'STRING'),
+         ('PERSONS_COUNT', 'المسجّلون عليه', 'NUMBER'), ('IS_ACTIVE_AR', 'نشط', 'STRING')],
+        [dict(col='NAME', label='الاسم', maxlen=100),
+         dict(col='SERIAL_NO', label='الرقم التسلسلي', required=True, maxlen=100, new_line=False),
+         dict(col='MAC_ADDRESS', label='MAC Address', maxlen=100),
+         dict(col='IP_ADDRESS', label='IP Address', maxlen=100, new_line=False),
+         dict(col='SITE_ID', label='الموقع', display='SELECT', lov='LK_OMI_SITE', null_text='- -', dtype='NUMBER'),
+         dict(col='REG_POINT_ID', label='نقطة التسجيل', display='SELECT', lov='LK_OMI_REG_POINT', null_text='- -',
+              dtype='NUMBER', new_line=False),
+         dict(col='LOCATION_DESC', label='وصف المكان', maxlen=200),
+         dict(col='IS_FIXED', label='جهاز ثابت', display='YESNO', default='N'),
+         dict(col='IS_CONNECTED', label='متصل بالشبكة', display='YESNO', default='N', new_line=False),
+         dict(col='REMARKS', label='ملاحظات', display='TEXTAREA'),
+         dict(col='IS_ACTIVE', label='نشط', display='YESNO', default='Y')],
+        'MOD_OMI', form_authz='OMI_MANAGER')
+
+    # 10008 summary
+    p = Page(10008, 'ملخص التسجيل', authz='MOD_OMI', alias='OMI-SUMMARY')
+    p.ir_region('حسب الموقع', """select SITE_AR, PERSONS_COUNT, REGISTERED_COUNT, NOT_REGISTERED_COUNT, NOT_UPLOADED_COUNT, TODAY_COUNT
+  from MOINFO_OMI_V_SUMMARY
+ order by SITE_AR""",
+        [('SITE_AR', 'الموقع', 'STRING'), ('PERSONS_COUNT', 'الأشخاص', 'NUMBER'), ('REGISTERED_COUNT', 'مسجّلون', 'NUMBER'),
+         ('NOT_REGISTERED_COUNT', 'غير مسجّلين', 'NUMBER'), ('NOT_UPLOADED_COUNT', 'لم يُرفعوا', 'NUMBER'),
+         ('TODAY_COUNT', 'اليوم', 'NUMBER')])
+    p.ir_region('التسجيل اليومي', """select REG_DAY, SITE_AR, REG_POINT_AR, REGISTERED_COUNT, UPLOADED_COUNT
+  from MOINFO_OMI_V_DAILY
+ order by REG_DAY desc, SITE_AR, REG_POINT_AR""",
+        [('REG_DAY', 'اليوم', 'DATE'), ('SITE_AR', 'الموقع', 'STRING'), ('REG_POINT_AR', 'نقطة التسجيل', 'STRING'),
+         ('REGISTERED_COUNT', 'مسجّلون', 'NUMBER'), ('UPLOADED_COUNT', 'مرفوعون', 'NUMBER')], seq=20)
+    pages.append(p)
+
+    # 10009/10010 lists
+    pages += crud(10009, 10010, 'قوائم تسجيل البصمة', 'قيمة', 'MOINFO_LOOKUPS', 'LOOKUP_ID',
+        f"""select l.LOOKUP_ID, t.TYPE_NAME_AR, l.NAME_AR, l.NAME_EN, l.SORT_ORDER, {YN.format(c='l.IS_ACTIVE')} as IS_ACTIVE_AR
+  from MOINFO_LOOKUPS l
+  join MOINFO_LOOKUP_TYPES t on t.LOOKUP_TYPE = l.LOOKUP_TYPE
+ where l.LOOKUP_TYPE in ('OMI_SITE', 'OMI_REG_POINT')
+ order by t.TYPE_NAME_AR, l.SORT_ORDER, l.NAME_AR""",
+        [('LOOKUP_ID', None, 'NUMBER'), ('TYPE_NAME_AR', 'القائمة', 'STRING'), ('NAME_AR', 'القيمة', 'STRING'),
+         ('NAME_EN', 'بالإنجليزية', 'STRING'), ('SORT_ORDER', 'الترتيب', 'NUMBER'), ('IS_ACTIVE_AR', 'نشطة', 'STRING')],
+        [dict(col='LOOKUP_TYPE', label='القائمة', display='SELECT', lov='OMI_LIST_TYPES', required=True, dtype='VARCHAR2'),
+         dict(col='NAME_AR', label='القيمة بالعربية', required=True, maxlen=255),
+         dict(col='NAME_EN', label='بالإنجليزية', maxlen=255, new_line=False),
+         dict(col='SORT_ORDER', label='الترتيب', display='NUMBER', dtype='NUMBER'),
+         dict(col='IS_ACTIVE', label='نشطة', display='YESNO', default='Y', new_line=False)],
+        'OMI_MANAGER')
+    return pages
+
 def all_pages():
     return (hr_pages() + evt_pages() + med_pages() + tsk_pages() + att_pages() + hd_pages() + cat_pages()
-            + prc_pages() + std_pages() + adv_pages())
+            + prc_pages() + std_pages() + adv_pages() + omi_pages())
 
