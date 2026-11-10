@@ -547,7 +547,7 @@ def tsk_pages():
          ('TASK_CATEGORY_AR', 'التصنيف', 'STRING'), ('ASSIGNED_NAME_AR', 'المكلّف', 'STRING'),
          ('REQUESTER_NAME_AR', 'صاحب الطلب', 'STRING'), ('REQUESTER_UNIT_AR', 'جهة الطلب', 'STRING'),
          ('RECEIVED_DATE', 'الاستلام', 'DATE'), ('DUE_DATE', 'الاستحقاق', 'DATE'), ('CLOSED_DATE', 'الإغلاق', 'DATE'),
-         ('DURATION_DAYS', 'المدة (أيام)', 'NUMBER'), ('LATE_AR', 'التأخير', 'STRING'), ('IS_CLOSED', 'مغلقة', 'STRING')],
+         ('DURATION_DAYS', 'المدة (أيام)', 'NUMBER'), ('LATE_AR', 'التأخير', 'STRING'), ('IS_CLOSED', None, 'STRING')],
         pk='TASK_ID', link_page=4002, link_item='P4002_TASK_ID')
     p.button(reg, 'CREATE', 'مهمة جديدة', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
              redirect='f?p=&APP_ID.:4002:&SESSION.::&DEBUG.:4002::', icon='fa-plus')

@@ -5704,8 +5704,9 @@ wwv_flow_imp_page.create_worksheet_column(
 ,p_db_column_name=>'IS_CLOSED'
 ,p_display_order=>160
 ,p_column_identifier=>'P'
-,p_column_label=>unistr('\0645\063A\0644\0642\0629')
+,p_column_label=>'IS_CLOSED'
 ,p_column_type=>'STRING'
+,p_display_text_as=>'HIDDEN_ESCAPE_SC'
 ,p_heading_alignment=>'LEFT'
 ,p_use_as_row_header=>'N'
 );
@@ -5716,7 +5717,7 @@ wwv_flow_imp_page.create_worksheet_rpt(
 ,p_report_alias=>'779'
 ,p_status=>'PUBLIC'
 ,p_is_default=>'Y'
-,p_report_columns=>'REF_NO:TITLE:STATUS_AR:PRIORITY_AR:TASK_TYPE_AR:TASK_CATEGORY_AR:ASSIGNED_NAME_AR:REQUESTER_NAME_AR:REQUESTER_UNIT_AR:RECEIVED_DATE:DUE_DATE:CLOSED_DATE:DURATION_DAYS:LATE_AR:IS_CLOSED:'
+,p_report_columns=>'REF_NO:TITLE:STATUS_AR:PRIORITY_AR:TASK_TYPE_AR:TASK_CATEGORY_AR:ASSIGNED_NAME_AR:REQUESTER_NAME_AR:REQUESTER_UNIT_AR:RECEIVED_DATE:DUE_DATE:CLOSED_DATE:DURATION_DAYS:LATE_AR:'
 );
 wwv_flow_imp_page.create_page_button(
  p_id=>wwv_flow_imp.id(930000000000000780)
