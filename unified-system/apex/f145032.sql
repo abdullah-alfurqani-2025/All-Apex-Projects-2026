@@ -2452,7 +2452,7 @@ wwv_flow_imp_page.create_page_item(
 ,p_item_icon_css_classes=>'fa-key'
 ,p_item_template_options=>'#DEFAULT#'
 ,p_attributes=>wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
-  'submit_when_enter_pressed', 'N')).to_clob
+  'submit_when_enter_pressed', 'Y')).to_clob
 );
 wwv_flow_imp_page.create_page_button(
  p_id=>wwv_flow_imp.id(930000000000000131)
@@ -2571,7 +2571,7 @@ wwv_flow_imp_page.create_page_item(
 ,p_field_template=>1612549789555753698
 ,p_item_template_options=>'#DEFAULT#'
 ,p_attributes=>wwv_flow_t_plugin_attributes(wwv_flow_t_varchar2(
-  'submit_when_enter_pressed', 'N')).to_clob
+  'submit_when_enter_pressed', 'Y')).to_clob
 );
 wwv_flow_imp_page.create_page_button(
  p_id=>wwv_flow_imp.id(930000000000000138)

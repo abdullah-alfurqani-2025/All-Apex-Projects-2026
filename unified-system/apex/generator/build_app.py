@@ -237,7 +237,8 @@ lreg = pl.static_region('النظام الموحد', None, template=T_REG_LOGIN,
 u = pl.item(lreg, 'P9999_USERNAME', label='اسم المستخدم', display='TEXT', seq=10, placeholder='اسم المستخدم',
             icon='fa-user', label_template=T_LBL_HIDDEN, maxlen=100, width=40, pwd_autocomplete='username')
 pw = pl.item(lreg, 'P9999_PASSWORD', label='كلمة المرور', display='PASSWORD', seq=20, placeholder='كلمة المرور',
-             icon='fa-key', label_template=T_LBL_HIDDEN, maxlen=100, width=40, pwd_autocomplete='current-password')
+             icon='fa-key', label_template=T_LBL_HIDDEN, maxlen=100, width=40, pwd_autocomplete='current-password',
+             submit_on_enter=True)
 pl.button(lreg, 'LOGIN', 'تسجيل الدخول', position='NEXT', hot=True, seq=40)
 pl.plsql_process('Login', "apex_authentication.login(p_username => :P9999_USERNAME, p_password => :P9999_PASSWORD);",
                  seq=20)
@@ -258,7 +259,7 @@ old = p10.item(r10, 'P10_OLD_PASSWORD', label='كلمة المرور الحال�
 new = p10.item(r10, 'P10_NEW_PASSWORD', label='كلمة المرور الجديدة', display='PASSWORD', seq=20, required=True,
                maxlen=100, pwd_autocomplete='new-password')
 cnf = p10.item(r10, 'P10_CONFIRM_PASSWORD', label='تأكيد كلمة المرور الجديدة', display='PASSWORD', seq=30,
-               required=True, maxlen=100, pwd_autocomplete='new-password')
+               required=True, maxlen=100, pwd_autocomplete='new-password', submit_on_enter=True)
 p10.button(r10, 'CHANGE', 'تغيير كلمة المرور', position='NEXT', hot=True, seq=10)
 p10.validation('Password rules', 'FUNC_BODY_RETURNING_ERR_TEXT',
                'return MOINFO_AUTH.VALIDATE_PASSWORD_RULES(:P10_NEW_PASSWORD);', None, item=new, seq=10, expr2='PLSQL')

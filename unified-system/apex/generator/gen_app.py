@@ -391,7 +391,8 @@ class Page:
     def item(self, region, name, label=None, display='TEXT', source=None, source_region=None, dtype='VARCHAR2',
              seq=10, required=False, pk=False, lov=None, null_text=None, maxlen=None, width=None, height=None,
              new_line=True, default=None, cond=None, read_only=False, help=None, pwd_autocomplete=None,
-             placeholder=None, icon=None, label_template=None, default_expr=None, cascade=None, multiple=False):
+             placeholder=None, icon=None, label_template=None, default_expr=None, cascade=None, multiple=False,
+             submit_on_enter=False):
         i = nid()
         da = {
             'TEXT': 'NATIVE_TEXT_FIELD', 'TEXTAREA': 'NATIVE_TEXTAREA', 'SELECT': 'NATIVE_SELECT_LIST',
@@ -419,12 +420,14 @@ class Page:
         elif display == 'HIDDEN':
             a = {'value_protected': 'Y'}
         elif display == 'PASSWORD':
-            a = {'submit_when_enter_pressed': 'N'}
+            a = {'submit_when_enter_pressed': 'Y' if submit_on_enter else 'N'}
         elif display == 'DISPLAY':
             a = {'based_on': 'VALUE', 'format': 'PLAIN', 'send_on_page_submit': 'Y', 'show_line_breaks': 'Y'}
         elif display == 'FILE':
             a = {'allow_multiple_files': 'Y' if multiple else 'N', 'display_as': 'DROPZONE_BLOCK',
                  'purge_file_at': 'REQUEST', 'storage_type': 'APEX_APPLICATION_TEMP_FILES'}
+        if display == 'TEXT' and submit_on_enter:
+            a['submit_when_enter_pressed'] = 'Y'
         if display == 'TEXT' and read_only:
             a['disabled'] = 'Y'
         if display == 'HIDDEN':
