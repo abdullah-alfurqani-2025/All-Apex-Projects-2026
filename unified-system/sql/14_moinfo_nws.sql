@@ -1,0 +1,297 @@
+--------------------------------------------------------------------------------
+-- MOINFO - النظام الموحد
+-- السكربت 14: دليل الجهات والاتصالات (NWS) — بديل News (f1200)
+--
+-- يُشغَّل بعد 01 إلى 13 في نفس الـ Schema.
+--
+-- النظام القديم دليل اتصالات للأخبار، فيه لكل نوع جهة جدول خاص وجدول جهات اتصال خاص (20 جدولًا):
+--   NEWS_ORG + NEWS_CATORG                          (مؤسسات حسب الدولة والتصنيف)
+--   NEWS_MIN_AFFAIRS ← NEWS_CATORG_AFFAIRS ← NEWS_EMBASSY_IN   (الخارجية وأقسامها والسفارات في السلطنة)
+--   NEWS_EMBASSY_OMAN                               (السفارات العمانية في الخارج)
+--   NEWS_MIN_INTERIOR ← NEWS_TYPE_INTERIOR ← NEWS_GOVERNATES ← NEWS_TOWN   (الداخلية ومكاتبها في المحافظات والولايات)
+--   NEWS_EMP، NEWS_MIN_AFFAIRS_USER، NEWS_AFFAIRS_OUT_USER، NEWS_MIN_INT_OFFICE، NEWS_MIN_INT_USER، NEWS_IN_OUT_ARBIC_USER
+--   (جهات الاتصال لكل نوع)
+-- يُدمج هنا في جدولين:
+--   MOINFO_NWS_ENTITIES : شجرة جهات واحدة (الجهة الأم PARENT_ID)، ولكل جهة نوع وتصنيف ودولة،
+--                         ومحافظة وولاية من النواة للجهات داخل السلطنة
+--   MOINFO_NWS_CONTACTS : جهات الاتصال، تتبع جهة أو دولة فقط (مثل المراسلين العرب)
+--   NEWS_REGIONS / NEWS_COUNTRIES ← MOINFO_COUNTRIES في النواة، مع عمود الإقليم REGION_ID (يضيفه هذا السكربت)
+--   NEWS_GOVERNATES / NEWS_TOWN   ← MOINFO_GOVERNORATES / MOINFO_WILAYATS في النواة
+--   NEWS_USER_INFO / PRIVILEGES   ← النواة
+--
+-- الصلاحيات في وحدة NWS:
+--   VIEWER  : يبحث في الدليل
+--   USER    : يضيف الجهات وجهات الاتصال ويعدّلها
+--   MANAGER : يحذف، ويدير القوائم (أنواع الجهات وتصنيفاتها والأقاليم)
+--------------------------------------------------------------------------------
+
+
+--==============================================================================
+-- 1) القوائم المرجعية
+--==============================================================================
+INSERT INTO MOINFO_LOOKUP_TYPES (LOOKUP_TYPE, MODULE_CODE, TYPE_NAME_AR, TYPE_NAME_EN) VALUES ('WORLD_REGION',    'CORE', 'الإقليم',      'World Region');
+INSERT INTO MOINFO_LOOKUP_TYPES (LOOKUP_TYPE, MODULE_CODE, TYPE_NAME_AR, TYPE_NAME_EN) VALUES ('NWS_ENTITY_TYPE', 'NWS',  'نوع الجهة',    'Entity Type');
+INSERT INTO MOINFO_LOOKUP_TYPES (LOOKUP_TYPE, MODULE_CODE, TYPE_NAME_AR, TYPE_NAME_EN) VALUES ('NWS_CATEGORY',    'NWS',  'تصنيف الجهة',  'Entity Category');
+
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('WORLD_REGION', 'GCC',      'دول الخليج العربية', 'GCC',          1);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('WORLD_REGION', 'ARAB',     'الدول العربية',      'Arab States',  2);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('WORLD_REGION', 'ASIA',     'آسيا',               'Asia',         3);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('WORLD_REGION', 'EUROPE',   'أوروبا',             'Europe',       4);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('WORLD_REGION', 'AFRICA',   'أفريقيا',            'Africa',       5);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('WORLD_REGION', 'AMERICAS', 'الأمريكتان',         'Americas',     6);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('WORLD_REGION', 'OCEANIA',  'أوقيانوسيا',         'Oceania',      7);
+
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_ENTITY_TYPE', 'MINISTRY',     'وزارة',                  'Ministry',            1);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_ENTITY_TYPE', 'DEPARTMENT',   'قسم أو دائرة',           'Department',          2);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_ENTITY_TYPE', 'OFFICE',       'مكتب في محافظة أو ولاية', 'Regional Office',     3);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_ENTITY_TYPE', 'EMBASSY_IN',   'سفارة في السلطنة',       'Embassy in Oman',     4);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_ENTITY_TYPE', 'EMBASSY_OMAN', 'سفارة عمانية في الخارج', 'Omani Embassy Abroad', 5);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_ENTITY_TYPE', 'ORG',          'مؤسسة أو منظمة',         'Organization',        6);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_ENTITY_TYPE', 'MEDIA',        'وسيلة إعلامية',          'Media Outlet',        7);
+
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_CATEGORY', 'GOV',      'حكومية',    'Government',    1);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_CATEGORY', 'PRIVATE',  'خاصة',      'Private',       2);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_CATEGORY', 'INTL',     'دولية',     'International', 3);
+INSERT INTO MOINFO_LOOKUPS (LOOKUP_TYPE, LOOKUP_CODE, NAME_AR, NAME_EN, SORT_ORDER) VALUES ('NWS_CATEGORY', 'DIPLO',    'دبلوماسية', 'Diplomatic',    4);
+COMMIT;
+
+
+--==============================================================================
+-- 2) إقليم الدولة في النواة
+--==============================================================================
+ALTER TABLE MOINFO_COUNTRIES ADD (REGION_ID NUMBER);
+ALTER TABLE MOINFO_COUNTRIES ADD CONSTRAINT MOINFO_COUNTRIES_REGION_FK FOREIGN KEY (REGION_ID) REFERENCES MOINFO_LOOKUPS (LOOKUP_ID);
+CREATE INDEX MOINFO_COUNTRIES_REGION_IX ON MOINFO_COUNTRIES (REGION_ID);
+
+-- Trigger التدقيق للدول يُعاد توليده ليشمل العمود الجديد
+BEGIN
+    MOINFO_UTIL.CREATE_ALL_TRIGGERS('MOINFO\_COUNTRIES');
+END;
+/
+
+
+--==============================================================================
+-- 3) الجداول
+--==============================================================================
+CREATE TABLE MOINFO_NWS_ENTITIES (
+    ENTITY_ID       NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY,
+    PARENT_ID       NUMBER,
+    ENTITY_TYPE_ID  NUMBER,
+    CATEGORY_ID     NUMBER,
+    NAME_AR         VARCHAR2(300 CHAR)          NOT NULL,
+    NAME_EN         VARCHAR2(300 CHAR),
+    COUNTRY_ID      NUMBER,
+    GOVERNORATE_ID  NUMBER,
+    WILAYAT_ID      NUMBER,
+    CITY            VARCHAR2(100 CHAR),
+    PHONE           VARCHAR2(30),
+    FAX             VARCHAR2(30),
+    EMAIL           VARCHAR2(255),
+    WEBSITE         VARCHAR2(255),
+    ADDRESS         VARCHAR2(500 CHAR),
+    NOTES           VARCHAR2(1000 CHAR),
+    SORT_ORDER      NUMBER(6),
+    IS_ACTIVE       VARCHAR2(1) DEFAULT ON NULL 'Y' NOT NULL,
+    CREATED_BY      VARCHAR2(255),
+    CREATED_AT      TIMESTAMP WITH LOCAL TIME ZONE,
+    UPDATED_BY      VARCHAR2(255),
+    UPDATED_AT      TIMESTAMP WITH LOCAL TIME ZONE,
+    CONSTRAINT MOINFO_NWS_ENT_PK PRIMARY KEY (ENTITY_ID),
+    CONSTRAINT MOINFO_NWS_ENT_PARENT_FK FOREIGN KEY (PARENT_ID) REFERENCES MOINFO_NWS_ENTITIES (ENTITY_ID),
+    CONSTRAINT MOINFO_NWS_ENT_TYPE_FK FOREIGN KEY (ENTITY_TYPE_ID) REFERENCES MOINFO_LOOKUPS (LOOKUP_ID),
+    CONSTRAINT MOINFO_NWS_ENT_CAT_FK FOREIGN KEY (CATEGORY_ID) REFERENCES MOINFO_LOOKUPS (LOOKUP_ID),
+    CONSTRAINT MOINFO_NWS_ENT_COUNTRY_FK FOREIGN KEY (COUNTRY_ID) REFERENCES MOINFO_COUNTRIES (COUNTRY_ID),
+    CONSTRAINT MOINFO_NWS_ENT_GOV_FK FOREIGN KEY (GOVERNORATE_ID) REFERENCES MOINFO_GOVERNORATES (GOVERNORATE_ID),
+    CONSTRAINT MOINFO_NWS_ENT_WIL_FK FOREIGN KEY (WILAYAT_ID) REFERENCES MOINFO_WILAYATS (WILAYAT_ID),
+    CONSTRAINT MOINFO_NWS_ENT_SELF_CK CHECK (PARENT_ID IS NULL OR PARENT_ID <> ENTITY_ID),
+    CONSTRAINT MOINFO_NWS_ENT_ACTIVE_CK CHECK (IS_ACTIVE IN ('Y','N'))
+);
+CREATE INDEX MOINFO_NWS_ENT_PARENT_IX  ON MOINFO_NWS_ENTITIES (PARENT_ID);
+CREATE INDEX MOINFO_NWS_ENT_TYPE_IX    ON MOINFO_NWS_ENTITIES (ENTITY_TYPE_ID);
+CREATE INDEX MOINFO_NWS_ENT_CAT_IX     ON MOINFO_NWS_ENTITIES (CATEGORY_ID);
+CREATE INDEX MOINFO_NWS_ENT_COUNTRY_IX ON MOINFO_NWS_ENTITIES (COUNTRY_ID);
+CREATE INDEX MOINFO_NWS_ENT_GOV_IX     ON MOINFO_NWS_ENTITIES (GOVERNORATE_ID);
+CREATE INDEX MOINFO_NWS_ENT_WIL_IX     ON MOINFO_NWS_ENTITIES (WILAYAT_ID);
+
+CREATE TABLE MOINFO_NWS_CONTACTS (
+    CONTACT_ID      NUMBER GENERATED BY DEFAULT ON NULL AS IDENTITY,
+    ENTITY_ID       NUMBER,
+    COUNTRY_ID      NUMBER,
+    NAME            VARCHAR2(300 CHAR)          NOT NULL,
+    DESIGNATION     VARCHAR2(200 CHAR),
+    MOBILE1         VARCHAR2(30),
+    MOBILE2         VARCHAR2(30),
+    TEL             VARCHAR2(30),
+    OFFICE_NO       VARCHAR2(30),
+    EMAIL           VARCHAR2(255),
+    CITY            VARCHAR2(100 CHAR),
+    REMARKS         VARCHAR2(500 CHAR),
+    IS_ACTIVE       VARCHAR2(1) DEFAULT ON NULL 'Y' NOT NULL,
+    CREATED_BY      VARCHAR2(255),
+    CREATED_AT      TIMESTAMP WITH LOCAL TIME ZONE,
+    UPDATED_BY      VARCHAR2(255),
+    UPDATED_AT      TIMESTAMP WITH LOCAL TIME ZONE,
+    CONSTRAINT MOINFO_NWS_CONT_PK PRIMARY KEY (CONTACT_ID),
+    CONSTRAINT MOINFO_NWS_CONT_ENT_FK FOREIGN KEY (ENTITY_ID) REFERENCES MOINFO_NWS_ENTITIES (ENTITY_ID) ON DELETE CASCADE,
+    CONSTRAINT MOINFO_NWS_CONT_COUNTRY_FK FOREIGN KEY (COUNTRY_ID) REFERENCES MOINFO_COUNTRIES (COUNTRY_ID),
+    CONSTRAINT MOINFO_NWS_CONT_TARGET_CK CHECK (ENTITY_ID IS NOT NULL OR COUNTRY_ID IS NOT NULL),
+    CONSTRAINT MOINFO_NWS_CONT_ACTIVE_CK CHECK (IS_ACTIVE IN ('Y','N'))
+);
+CREATE INDEX MOINFO_NWS_CONT_ENT_IX     ON MOINFO_NWS_CONTACTS (ENTITY_ID);
+CREATE INDEX MOINFO_NWS_CONT_COUNTRY_IX ON MOINFO_NWS_CONTACTS (COUNTRY_ID);
+CREATE INDEX MOINFO_NWS_CONT_NAME_IX    ON MOINFO_NWS_CONTACTS (UPPER(NAME));
+
+
+--==============================================================================
+-- 4) Trigger القواعد
+--==============================================================================
+-- الولاية تحدد المحافظة، والمحافظة أو الولاية تعني أن الدولة عُمان إن وُجدت في الدول
+CREATE OR REPLACE TRIGGER MOINFO_NWS_ENTITIES_RULES_BIU
+BEFORE INSERT OR UPDATE OF WILAYAT_ID, GOVERNORATE_ID, COUNTRY_ID ON MOINFO_NWS_ENTITIES
+FOR EACH ROW
+BEGIN
+    IF :NEW.WILAYAT_ID IS NOT NULL THEN
+        SELECT GOVERNORATE_ID INTO :NEW.GOVERNORATE_ID FROM MOINFO_WILAYATS WHERE WILAYAT_ID = :NEW.WILAYAT_ID;
+    END IF;
+    IF :NEW.GOVERNORATE_ID IS NOT NULL AND :NEW.COUNTRY_ID IS NULL THEN
+        SELECT MIN(COUNTRY_ID) INTO :NEW.COUNTRY_ID FROM MOINFO_COUNTRIES WHERE ISO2 = 'OM';
+    END IF;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        NULL;  -- يتكفل به الـ Foreign Key
+END;
+/
+
+
+--==============================================================================
+-- 5) MOINFO_NWS
+--==============================================================================
+CREATE OR REPLACE PACKAGE MOINFO_NWS AS
+
+    -- 'Y' إن كان للمستخدم الحالي دور USER فأعلى (الإضافة والتعديل)
+    FUNCTION CAN_EDIT RETURN VARCHAR2;
+
+    -- 'Y' إن كان للمستخدم الحالي دور MANAGER فأعلى (الحذف والقوائم)
+    FUNCTION IS_MANAGER RETURN VARCHAR2;
+
+END MOINFO_NWS;
+/
+
+CREATE OR REPLACE PACKAGE BODY MOINFO_NWS AS
+
+    FUNCTION CAN_EDIT RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE WHEN MOINFO_SEC.HAS_ROLE('NWS', 'USER') THEN 'Y' ELSE 'N' END;
+    END CAN_EDIT;
+
+    FUNCTION IS_MANAGER RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE WHEN MOINFO_SEC.HAS_ROLE('NWS', 'MANAGER') THEN 'Y' ELSE 'N' END;
+    END IS_MANAGER;
+
+END MOINFO_NWS;
+/
+
+
+--==============================================================================
+-- 6) Views
+--==============================================================================
+CREATE OR REPLACE VIEW MOINFO_V_COUNTRIES AS
+SELECT c.COUNTRY_ID,
+       c.ISO2,
+       c.NAME_AR,
+       c.NAME_EN,
+       c.NATIONALITY_AR,
+       c.REGION_ID,
+       r.NAME_AR AS REGION_AR,
+       c.SORT_ORDER,
+       c.IS_ACTIVE
+  FROM MOINFO_COUNTRIES c
+  LEFT JOIN MOINFO_LOOKUPS r ON r.LOOKUP_ID = c.REGION_ID;
+
+-- شجرة الجهات بالمسار الكامل
+CREATE OR REPLACE VIEW MOINFO_NWS_V_ENTITIES AS
+SELECT t.ENTITY_ID,
+       t.PARENT_ID,
+       t.ROOT_ID,
+       t.TREE_DEPTH,
+       t.ENTITY_PATH_AR,
+       t.NAME_AR,
+       t.NAME_EN,
+       t.ENTITY_TYPE_ID,
+       ty.LOOKUP_CODE AS ENTITY_TYPE_CODE,
+       ty.NAME_AR AS ENTITY_TYPE_AR,
+       t.CATEGORY_ID,
+       ca.NAME_AR AS CATEGORY_AR,
+       t.COUNTRY_ID,
+       co.NAME_AR AS COUNTRY_AR,
+       co.REGION_AR,
+       t.GOVERNORATE_ID,
+       g.NAME_AR AS GOVERNORATE_AR,
+       t.WILAYAT_ID,
+       w.NAME_AR AS WILAYAT_AR,
+       t.CITY,
+       t.PHONE,
+       t.FAX,
+       t.EMAIL,
+       t.WEBSITE,
+       t.ADDRESS,
+       t.NOTES,
+       t.SORT_ORDER,
+       t.IS_ACTIVE,
+       (SELECT COUNT(*) FROM MOINFO_NWS_CONTACTS c WHERE c.ENTITY_ID = t.ENTITY_ID AND c.IS_ACTIVE = 'Y') AS CONTACTS_COUNT,
+       (SELECT COUNT(*) FROM MOINFO_NWS_ENTITIES x WHERE x.PARENT_ID = t.ENTITY_ID) AS CHILDREN_COUNT
+  FROM (SELECT e.*,
+               LEVEL AS TREE_DEPTH,
+               CONNECT_BY_ROOT e.ENTITY_ID AS ROOT_ID,
+               SUBSTR(SYS_CONNECT_BY_PATH(REPLACE(e.NAME_AR, ' » ', ' - '), ' » '), 4) AS ENTITY_PATH_AR
+          FROM MOINFO_NWS_ENTITIES e
+         START WITH e.PARENT_ID IS NULL
+       CONNECT BY NOCYCLE PRIOR e.ENTITY_ID = e.PARENT_ID) t
+  LEFT JOIN MOINFO_LOOKUPS ty       ON ty.LOOKUP_ID = t.ENTITY_TYPE_ID
+  LEFT JOIN MOINFO_LOOKUPS ca       ON ca.LOOKUP_ID = t.CATEGORY_ID
+  LEFT JOIN MOINFO_V_COUNTRIES co   ON co.COUNTRY_ID = t.COUNTRY_ID
+  LEFT JOIN MOINFO_GOVERNORATES g   ON g.GOVERNORATE_ID = t.GOVERNORATE_ID
+  LEFT JOIN MOINFO_WILAYATS w       ON w.WILAYAT_ID = t.WILAYAT_ID;
+
+-- الدليل: كل جهات الاتصال مع جهتها ودولتها
+CREATE OR REPLACE VIEW MOINFO_NWS_V_CONTACTS AS
+SELECT c.CONTACT_ID,
+       c.NAME,
+       c.DESIGNATION,
+       c.MOBILE1,
+       c.MOBILE2,
+       c.TEL,
+       c.OFFICE_NO,
+       c.EMAIL,
+       NVL(c.CITY, e.CITY) AS CITY,
+       c.REMARKS,
+       c.IS_ACTIVE,
+       c.ENTITY_ID,
+       e.NAME_AR AS ENTITY_AR,
+       e.ENTITY_PATH_AR,
+       e.ENTITY_TYPE_AR,
+       e.CATEGORY_AR,
+       NVL(c.COUNTRY_ID, e.COUNTRY_ID) AS COUNTRY_ID,
+       NVL(cc.NAME_AR, e.COUNTRY_AR) AS COUNTRY_AR,
+       NVL(cc.REGION_AR, e.REGION_AR) AS REGION_AR,
+       e.GOVERNORATE_AR,
+       e.WILAYAT_AR
+  FROM MOINFO_NWS_CONTACTS c
+  LEFT JOIN MOINFO_NWS_V_ENTITIES e ON e.ENTITY_ID = c.ENTITY_ID
+  LEFT JOIN MOINFO_V_COUNTRIES cc   ON cc.COUNTRY_ID = c.COUNTRY_ID;
+
+
+--==============================================================================
+-- 7) Triggers التدقيق والتحقق
+--==============================================================================
+BEGIN
+    MOINFO_UTIL.CREATE_ALL_TRIGGERS('MOINFO\_NWS\_%');
+END;
+/
+
+SELECT OBJECT_TYPE, OBJECT_NAME, STATUS
+  FROM USER_OBJECTS
+ WHERE (OBJECT_NAME LIKE 'MOINFO\_NWS%' ESCAPE '\' OR OBJECT_NAME IN ('MOINFO_V_COUNTRIES', 'MOINFO_COUNTRIES', 'MOINFO_COUNTRIES_BIUD'))
+   AND OBJECT_TYPE IN ('TABLE', 'PACKAGE', 'PACKAGE BODY', 'TRIGGER', 'VIEW')
+ ORDER BY STATUS DESC, OBJECT_TYPE, OBJECT_NAME;

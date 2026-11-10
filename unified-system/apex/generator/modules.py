@@ -8,7 +8,7 @@ DML = 'CREATE,SAVE,DELETE'
 # ------------------------------------------------------------------------------
 def authorizations():
     calls = []
-    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD', 'PRC', 'STD', 'ADV', 'OMI']:
+    for code in ['HR', 'EVT', 'MED', 'TSK', 'ATT', 'HD', 'PRC', 'STD', 'ADV', 'OMI', 'NWS']:
         calls.append(authorization(f'{code}_MANAGER', f"return MOINFO_SEC.HAS_ROLE('{code}', 'MANAGER');",
                                    'هذه الصفحة للمشرفين في الوحدة'))
     calls.append(authorization('CAT_MANAGER', """return MOINFO_SEC.IS_ADMIN
@@ -38,7 +38,7 @@ def lovs():
               'TSK_CATEGORY', 'ATT_CATEGORY', 'HD_DEVICE_STATUS', 'HD_REQUEST_STATUS', 'PRC_REQUEST_STATUS',
               'STD_ITEM_STATUS', 'STD_LOCATION', 'STD_BIN',
               'ADV_SECTOR', 'ADV_INDUSTRY', 'ADV_MEDIA', 'ADV_DEAL_STATUS', 'ADV_ACTIVITY_TYPE',
-              'OMI_SITE', 'OMI_REG_POINT']:
+              'OMI_SITE', 'OMI_REG_POINT', 'NWS_ENTITY_TYPE', 'NWS_CATEGORY', 'WORLD_REGION']:
         out.append(lookup_lov(t))
     out.append(lov('COUNTRIES', "select NAME_AR d, COUNTRY_ID r from MOINFO_COUNTRIES where IS_ACTIVE = 'Y' order by SORT_ORDER, NAME_AR"))
     out.append(lov('WILAYATS', """select g.NAME_AR || ' - ' || w.NAME_AR d, w.WILAYAT_ID r
@@ -91,6 +91,20 @@ def lovs():
     out.append(lov('OMI_TERMINALS', """select nvl(NAME, SERIAL_NO) || nvl2(REG_POINT_AR, ' - ' || REG_POINT_AR, '') d, TERMINAL_ID r
   from MOINFO_OMI_V_TERMINALS where IS_ACTIVE = 'Y' order by NAME, SERIAL_NO"""))
     out.append(static_lov('OMI_LIST_TYPES', [('الموقع', 'OMI_SITE'), ('نقطة التسجيل', 'OMI_REG_POINT')]))
+    out.append(lov('NWS_ENTITIES', "select ENTITY_PATH_AR d, ENTITY_ID r from MOINFO_NWS_V_ENTITIES where IS_ACTIVE = 'Y' order by ENTITY_PATH_AR"))
+    out.append(lov('NWS_PARENT_ENTITIES', """select ENTITY_PATH_AR d, ENTITY_ID r
+  from MOINFO_NWS_V_ENTITIES
+ where IS_ACTIVE = 'Y'
+   and (:P11003_ENTITY_ID is null
+        or ENTITY_ID not in (select ENTITY_ID from MOINFO_NWS_ENTITIES
+                              start with ENTITY_ID = :P11003_ENTITY_ID
+                            connect by prior ENTITY_ID = PARENT_ID))
+ order by ENTITY_PATH_AR"""))
+    out.append(lov('NWS_WILAYATS_BY_GOV', """select NAME_AR d, WILAYAT_ID r from MOINFO_WILAYATS
+ where IS_ACTIVE = 'Y' and GOVERNORATE_ID = :P11003_GOVERNORATE_ID
+ order by SORT_ORDER, NAME_AR"""))
+    out.append(static_lov('NWS_LIST_TYPES', [('نوع الجهة', 'NWS_ENTITY_TYPE'), ('تصنيف الجهة', 'NWS_CATEGORY'),
+                                             ('الإقليم', 'WORLD_REGION')]))
     out.append(static_lov('PRC_ITEM_DECISION', [('معتمد', 'Y'), ('مرفوض', 'N')]))
     out.append(static_lov('MED_CREW_ROLE', [('مصور', 'PHOTOGRAPHER'), ('مونتاج', 'EDITOR'), ('مراسل', 'REPORTER')]))
     out.append(static_lov('TSK_PRIORITY', [('منخفضة', 'LOW'), ('عادية', 'NORMAL'), ('عالية', 'HIGH'), ('عاجلة', 'URGENT')]))
@@ -161,6 +175,12 @@ MODULE_MENU = [
         ('الملخص', 10008, '10008', 'MOD_OMI'),
         ('القوائم', 10009, '10009,10010', 'OMI_MANAGER'),
     ]),
+    ('NWS', 'دليل الجهات', 'fa-address-book', [
+        ('دليل الاتصال', 11001, '11001,11004', 'MOD_NWS'),
+        ('الجهات', 11002, '11002,11003', 'MOD_NWS'),
+        ('الدول والأقاليم', 11005, '11005', 'MOD_NWS'),
+        ('قوائم الدليل', 11006, '11006,11007', 'NWS_MANAGER'),
+    ]),
     ('CAT', 'الكتالوج المشترك', 'fa-tags', [
         ('أنواع المنتجات', 100, '100,101', 'CAT_MANAGER'),
         ('الماركات', 102, '102,103', 'CAT_MANAGER'),
@@ -195,6 +215,7 @@ def home_cards():
         'STD': 'المعدات وصرفها واستلامها والجرد',
         'ADV': 'المعلنون والوكالات والفرص الإعلانية ومتابعتها',
         'OMI': 'تسجيل البصمات ورفعها إلى Alpeta وأجهزة البصمة',
+        'NWS': 'الوزارات والسفارات والمؤسسات وجهات الاتصال فيها',
         'CAT': 'الماركات والموديلات والموردون وأنواع الضمان',
     }
     out = [dict(text='بياناتي', page=1010, icon='fa-user-circle', authz='HAS_EMPLOYEE', desc='بياناتك الوظيفية والشخصية',
@@ -2059,7 +2080,177 @@ end loop;""", point='BEFORE_HEADER', seq=10, cond=('ITEM_IS_NOT_NULL', 'P10011_C
         'OMI_MANAGER')
     return pages
 
+# ------------------------------------------------------------------------------
+# NWS (11000)
+# ------------------------------------------------------------------------------
+NWS_CONTACT_COLS = [('CONTACT_ID', None, 'NUMBER'), ('NAME', 'الاسم', 'STRING'), ('DESIGNATION', 'المسمى', 'STRING'),
+                    ('ENTITY_PATH_AR', 'الجهة', 'STRING'), ('ENTITY_TYPE_AR', 'نوع الجهة', 'STRING'),
+                    ('COUNTRY_AR', 'الدولة', 'STRING'), ('REGION_AR', 'الإقليم', 'STRING'),
+                    ('GOVERNORATE_AR', 'المحافظة', 'STRING'), ('WILAYAT_AR', 'الولاية', 'STRING'), ('CITY', 'المدينة', 'STRING'),
+                    ('MOBILE1', 'الهاتف 1', 'STRING'), ('MOBILE2', 'الهاتف 2', 'STRING'), ('TEL', 'الثابت', 'STRING'),
+                    ('OFFICE_NO', 'المكتب', 'STRING'), ('EMAIL', 'البريد', 'STRING'), ('REMARKS', 'ملاحظات', 'STRING')]
+NWS_CONTACT_SEL = """select CONTACT_ID, NAME, DESIGNATION, ENTITY_PATH_AR, ENTITY_TYPE_AR, COUNTRY_AR, REGION_AR, GOVERNORATE_AR,
+       WILAYAT_AR, CITY, MOBILE1, MOBILE2, TEL, OFFICE_NO, EMAIL, REMARKS
+  from MOINFO_NWS_V_CONTACTS"""
+NWS_ENT_COLS = [('ENTITY_ID', None, 'NUMBER'), ('ENTITY_PATH_AR', 'الجهة', 'STRING'), ('ENTITY_TYPE_AR', 'النوع', 'STRING'),
+                ('CATEGORY_AR', 'التصنيف', 'STRING'), ('COUNTRY_AR', 'الدولة', 'STRING'),
+                ('GOVERNORATE_AR', 'المحافظة', 'STRING'), ('WILAYAT_AR', 'الولاية', 'STRING'), ('PHONE', 'الهاتف', 'STRING'),
+                ('EMAIL', 'البريد', 'STRING'), ('CHILDREN_COUNT', 'جهات فرعية', 'NUMBER'),
+                ('CONTACTS_COUNT', 'جهات الاتصال', 'NUMBER')]
+NWS_ENT_SEL = """select ENTITY_ID, ENTITY_PATH_AR, ENTITY_TYPE_AR, CATEGORY_AR, COUNTRY_AR, GOVERNORATE_AR, WILAYAT_AR, PHONE, EMAIL,
+       CHILDREN_COUNT, CONTACTS_COUNT
+  from MOINFO_NWS_V_ENTITIES"""
+
+def nws_pages():
+    pages = []
+    can_edit = "MOINFO_NWS.CAN_EDIT = 'Y'"
+    mgr = "MOINFO_NWS.IS_MANAGER = 'Y'"
+
+    # 11001 directory
+    p = Page(11001, 'دليل الاتصال', authz='MOD_NWS', alias='NWS-DIRECTORY')
+    reg = p.ir_region('دليل الاتصال', NWS_CONTACT_SEL + "\n where IS_ACTIVE = 'Y'\n order by ENTITY_PATH_AR, NAME",
+                      NWS_CONTACT_COLS, pk='CONTACT_ID', link_page=11004, link_item='P11004_CONTACT_ID')
+    p.button(reg, 'CREATE', 'جهة اتصال جديدة', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:11004:&SESSION.::&DEBUG.:11004::', icon='fa-plus',
+             cond_type='EXPRESSION', cond_item=can_edit, cond_lang='PLSQL')
+    pages.append(p)
+
+    # 11002 entities
+    p = Page(11002, 'الجهات', authz='MOD_NWS', alias='NWS-ENTITIES')
+    reg = p.ir_region('الجهات', NWS_ENT_SEL + "\n where IS_ACTIVE = 'Y'\n order by ENTITY_PATH_AR", NWS_ENT_COLS,
+                      pk='ENTITY_ID', link_page=11003, link_item='P11003_ENTITY_ID')
+    p.button(reg, 'CREATE', 'جهة جديدة', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:11003:&SESSION.::&DEBUG.:11003::', icon='fa-plus',
+             cond_type='EXPRESSION', cond_item=can_edit, cond_lang='PLSQL')
+    pages.append(p)
+
+    # 11003 entity
+    p = Page(11003, 'جهة', authz='MOD_NWS', alias='NWS-ENTITY')
+    r = p.form_region('جهة', 'MOINFO_NWS_ENTITIES')
+    p.item(r, 'P11003_ENTITY_ID', display='HIDDEN', source='ENTITY_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
+    p.item(r, 'P11003_NAME_AR', label='اسم الجهة', source='NAME_AR', source_region=r, required=True, maxlen=300, seq=10)
+    p.item(r, 'P11003_NAME_EN', label='بالإنجليزية', source='NAME_EN', source_region=r, maxlen=300, seq=20, new_line=False)
+    p.item(r, 'P11003_PARENT_ID', label='تتبع الجهة', display='POPUP', source='PARENT_ID', source_region=r, dtype='NUMBER',
+           lov='NWS_PARENT_ENTITIES', null_text='', seq=30, help='اتركها فارغة إن كانت جهة رئيسية')
+    p.item(r, 'P11003_ENTITY_TYPE_ID', label='النوع', display='SELECT', source='ENTITY_TYPE_ID', source_region=r,
+           dtype='NUMBER', lov='LK_NWS_ENTITY_TYPE', null_text='- -', seq=40)
+    p.item(r, 'P11003_CATEGORY_ID', label='التصنيف', display='SELECT', source='CATEGORY_ID', source_region=r,
+           dtype='NUMBER', lov='LK_NWS_CATEGORY', null_text='- -', seq=50, new_line=False)
+    p.item(r, 'P11003_COUNTRY_ID', label='الدولة', display='POPUP', source='COUNTRY_ID', source_region=r, dtype='NUMBER',
+           lov='COUNTRIES', null_text='', seq=60)
+    p.item(r, 'P11003_GOVERNORATE_ID', label='المحافظة', display='SELECT', source='GOVERNORATE_ID', source_region=r,
+           dtype='NUMBER', lov='GOVERNORATES', null_text='- -', seq=70, new_line=False, help='للجهات داخل السلطنة')
+    p.item(r, 'P11003_WILAYAT_ID', label='الولاية', display='SELECT', source='WILAYAT_ID', source_region=r,
+           dtype='NUMBER', lov='NWS_WILAYATS_BY_GOV', null_text='- -', seq=80, new_line=False,
+           cascade='P11003_GOVERNORATE_ID')
+    p.item(r, 'P11003_CITY', label='المدينة', source='CITY', source_region=r, maxlen=100, seq=90)
+    p.item(r, 'P11003_PHONE', label='الهاتف', source='PHONE', source_region=r, maxlen=30, seq=100, new_line=False)
+    p.item(r, 'P11003_FAX', label='الفاكس', source='FAX', source_region=r, maxlen=30, seq=110, new_line=False)
+    p.item(r, 'P11003_EMAIL', label='البريد الإلكتروني', source='EMAIL', source_region=r, maxlen=255, seq=120)
+    p.item(r, 'P11003_WEBSITE', label='الموقع الإلكتروني', source='WEBSITE', source_region=r, maxlen=255, seq=130,
+           new_line=False)
+    p.item(r, 'P11003_ADDRESS', label='العنوان', source='ADDRESS', source_region=r, maxlen=500, seq=140)
+    p.item(r, 'P11003_NOTES', label='ملاحظات', display='TEXTAREA', source='NOTES', source_region=r, seq=150)
+    p.item(r, 'P11003_SORT_ORDER', label='الترتيب', display='NUMBER', source='SORT_ORDER', source_region=r,
+           dtype='NUMBER', seq=160)
+    p.item(r, 'P11003_IS_ACTIVE', label='نشطة', display='YESNO', source='IS_ACTIVE', source_region=r, default='Y',
+           seq=170, new_line=False)
+    p.button(r, 'BACK', 'رجوع', action='REDIRECT_PAGE', position='CLOSE', seq=10,
+             redirect='f?p=&APP_ID.:11002:&SESSION.::&DEBUG.:::', exec_val=False)
+    delete = p.button(r, 'DELETE', 'حذف', position='DELETE', seq=20, cond_type='EXPRESSION',
+                      cond_item=f":P11003_ENTITY_ID is not null and {mgr}", cond_lang='PLSQL',
+                      db_action='DELETE', confirm='حذف الجهة وجهات اتصالها؟ (لا تُحذف إن كانت لها جهات فرعية)',
+                      exec_val=False)
+    p.button(r, 'SAVE', 'حفظ', position='CHANGE', hot=True, seq=30, cond_type='EXPRESSION',
+             cond_item=f":P11003_ENTITY_ID is not null and {can_edit}", cond_lang='PLSQL', db_action='UPDATE')
+    p.button(r, 'CREATE', 'إضافة', position='CREATE', hot=True, seq=40, cond_type='EXPRESSION',
+             cond_item=f":P11003_ENTITY_ID is null and {can_edit}", cond_lang='PLSQL', db_action='INSERT')
+    p.form_processes(r, 'Entity', dml_cond=DML, success='تم الحفظ')
+    sub = p.ir_region('الجهات الفرعية', NWS_ENT_SEL + "\n where PARENT_ID = :P11003_ENTITY_ID\n order by SORT_ORDER, NAME_AR",
+                      NWS_ENT_COLS, pk='ENTITY_ID', link_page=11003, link_item='P11003_ENTITY_ID', seq=20,
+                      cond=('ITEM_IS_NOT_NULL', 'P11003_ENTITY_ID'))
+    p.button(sub, 'ADD_CHILD', 'جهة فرعية', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:11003:&SESSION.::&DEBUG.:11003:P11003_PARENT_ID:&P11003_ENTITY_ID.', icon='fa-plus',
+             cond_type='EXPRESSION', cond_item=can_edit, cond_lang='PLSQL')
+    cr = p.ir_region('جهات الاتصال', NWS_CONTACT_SEL + "\n where ENTITY_ID = :P11003_ENTITY_ID\n order by NAME",
+                     NWS_CONTACT_COLS, pk='CONTACT_ID', link_page=11004, link_item='P11004_CONTACT_ID', seq=30,
+                     cond=('ITEM_IS_NOT_NULL', 'P11003_ENTITY_ID'))
+    p.button(cr, 'ADD_CONTACT', 'جهة اتصال', action='REDIRECT_PAGE', position='RIGHT_OF_IR_SEARCH_BAR', hot=True,
+             redirect='f?p=&APP_ID.:11004:&SESSION.::&DEBUG.:11004:P11004_ENTITY_ID:&P11003_ENTITY_ID.', icon='fa-plus',
+             cond_type='EXPRESSION', cond_item=can_edit, cond_lang='PLSQL')
+    p.branch(11002, seq=10, when_button=delete)
+    p.branch(11003, seq=100, items=('P11003_ENTITY_ID', '&P11003_ENTITY_ID.'))
+    pages.append(p)
+
+    # 11004 contact
+    p = Page(11004, 'جهة اتصال', authz='MOD_NWS', alias='NWS-CONTACT')
+    r = p.form_region('جهة اتصال', 'MOINFO_NWS_CONTACTS')
+    p.item(r, 'P11004_CONTACT_ID', display='HIDDEN', source='CONTACT_ID', source_region=r, dtype='NUMBER', pk=True, seq=1)
+    p.item(r, 'P11004_NAME', label='الاسم', source='NAME', source_region=r, required=True, maxlen=300, seq=10)
+    p.item(r, 'P11004_DESIGNATION', label='المسمى', source='DESIGNATION', source_region=r, maxlen=200, seq=20,
+           new_line=False)
+    p.item(r, 'P11004_ENTITY_ID', label='الجهة', display='POPUP', source='ENTITY_ID', source_region=r, dtype='NUMBER',
+           lov='NWS_ENTITIES', null_text='', seq=30)
+    p.item(r, 'P11004_COUNTRY_ID', label='أو الدولة', display='POPUP', source='COUNTRY_ID', source_region=r,
+           dtype='NUMBER', lov='COUNTRIES', null_text='', seq=40, new_line=False,
+           help='لمن لا يتبع جهة محددة، مثل المراسلين')
+    p.item(r, 'P11004_MOBILE1', label='الهاتف 1', source='MOBILE1', source_region=r, maxlen=30, seq=50)
+    p.item(r, 'P11004_MOBILE2', label='الهاتف 2', source='MOBILE2', source_region=r, maxlen=30, seq=60, new_line=False)
+    p.item(r, 'P11004_TEL', label='الثابت', source='TEL', source_region=r, maxlen=30, seq=70, new_line=False)
+    p.item(r, 'P11004_OFFICE_NO', label='رقم المكتب', source='OFFICE_NO', source_region=r, maxlen=30, seq=80)
+    p.item(r, 'P11004_EMAIL', label='البريد الإلكتروني', source='EMAIL', source_region=r, maxlen=255, seq=90,
+           new_line=False)
+    p.item(r, 'P11004_CITY', label='المدينة', source='CITY', source_region=r, maxlen=100, seq=100, new_line=False)
+    p.item(r, 'P11004_REMARKS', label='ملاحظات', display='TEXTAREA', source='REMARKS', source_region=r, seq=110)
+    p.item(r, 'P11004_IS_ACTIVE', label='نشطة', display='YESNO', source='IS_ACTIVE', source_region=r, default='Y',
+           seq=120)
+    p.validation('Entity or country', 'EXPRESSION', ':P11004_ENTITY_ID is not null or :P11004_COUNTRY_ID is not null',
+                 'اختر الجهة أو الدولة', seq=10, expr2='PLSQL')
+    back = "f?p=&APP_ID.:11001:&SESSION.::&DEBUG.:::"
+    p.button(r, 'BACK', 'رجوع', action='REDIRECT_PAGE', position='CLOSE', seq=10, redirect=back, exec_val=False)
+    p.button(r, 'DELETE', 'حذف', position='DELETE', seq=20, cond_type='EXPRESSION',
+             cond_item=f":P11004_CONTACT_ID is not null and {mgr}", cond_lang='PLSQL',
+             db_action='DELETE', confirm='حذف جهة الاتصال؟', exec_val=False)
+    p.button(r, 'SAVE', 'حفظ', position='CHANGE', hot=True, seq=30, cond_type='EXPRESSION',
+             cond_item=f":P11004_CONTACT_ID is not null and {can_edit}", cond_lang='PLSQL', db_action='UPDATE')
+    p.button(r, 'CREATE', 'إضافة', position='CREATE', hot=True, seq=40, cond_type='EXPRESSION',
+             cond_item=f":P11004_CONTACT_ID is null and {can_edit}", cond_lang='PLSQL', db_action='INSERT')
+    p.form_processes(r, 'Contact', dml_cond=DML, success='تم الحفظ')
+    p.branch(11003, seq=10, items=('P11003_ENTITY_ID', '&P11004_ENTITY_ID.'), cond=('ITEM_IS_NOT_NULL', 'P11004_ENTITY_ID'))
+    p.branch(11001, seq=100)
+    pages.append(p)
+
+    # 11005 countries
+    p = Page(11005, 'الدول والأقاليم', authz='MOD_NWS', alias='NWS-COUNTRIES')
+    p.ir_region('الدول', """select c.COUNTRY_ID, c.NAME_AR, c.NAME_EN, c.REGION_AR,
+       (select count(*) from MOINFO_NWS_ENTITIES e where e.COUNTRY_ID = c.COUNTRY_ID) as ENTITIES_COUNT,
+       (select count(*) from MOINFO_NWS_V_CONTACTS x where x.COUNTRY_ID = c.COUNTRY_ID) as CONTACTS_COUNT
+  from MOINFO_V_COUNTRIES c
+ where c.IS_ACTIVE = 'Y'
+ order by c.REGION_AR nulls last, c.NAME_AR""",
+        [('COUNTRY_ID', None, 'NUMBER'), ('NAME_AR', 'الدولة', 'STRING'), ('NAME_EN', 'بالإنجليزية', 'STRING'),
+         ('REGION_AR', 'الإقليم', 'STRING'), ('ENTITIES_COUNT', 'الجهات', 'NUMBER'),
+         ('CONTACTS_COUNT', 'جهات الاتصال', 'NUMBER')])
+    pages.append(p)
+
+    # 11006/11007 lists
+    pages += crud(11006, 11007, 'قوائم الدليل', 'قيمة', 'MOINFO_LOOKUPS', 'LOOKUP_ID',
+        f"""select l.LOOKUP_ID, t.TYPE_NAME_AR, l.NAME_AR, l.NAME_EN, l.SORT_ORDER, {YN.format(c='l.IS_ACTIVE')} as IS_ACTIVE_AR
+  from MOINFO_LOOKUPS l
+  join MOINFO_LOOKUP_TYPES t on t.LOOKUP_TYPE = l.LOOKUP_TYPE
+ where l.LOOKUP_TYPE in ('NWS_ENTITY_TYPE', 'NWS_CATEGORY', 'WORLD_REGION')
+ order by t.TYPE_NAME_AR, l.SORT_ORDER, l.NAME_AR""",
+        [('LOOKUP_ID', None, 'NUMBER'), ('TYPE_NAME_AR', 'القائمة', 'STRING'), ('NAME_AR', 'القيمة', 'STRING'),
+         ('NAME_EN', 'بالإنجليزية', 'STRING'), ('SORT_ORDER', 'الترتيب', 'NUMBER'), ('IS_ACTIVE_AR', 'نشطة', 'STRING')],
+        [dict(col='LOOKUP_TYPE', label='القائمة', display='SELECT', lov='NWS_LIST_TYPES', required=True, dtype='VARCHAR2'),
+         dict(col='NAME_AR', label='القيمة بالعربية', required=True, maxlen=255),
+         dict(col='NAME_EN', label='بالإنجليزية', maxlen=255, new_line=False),
+         dict(col='SORT_ORDER', label='الترتيب', display='NUMBER', dtype='NUMBER'),
+         dict(col='IS_ACTIVE', label='نشطة', display='YESNO', default='Y', new_line=False)],
+        'NWS_MANAGER')
+    return pages
+
 def all_pages():
     return (hr_pages() + evt_pages() + med_pages() + tsk_pages() + att_pages() + hd_pages() + cat_pages()
-            + prc_pages() + std_pages() + adv_pages() + omi_pages())
+            + prc_pages() + std_pages() + adv_pages() + omi_pages() + nws_pages())
 

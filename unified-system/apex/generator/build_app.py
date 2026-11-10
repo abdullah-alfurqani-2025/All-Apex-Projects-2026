@@ -447,16 +447,17 @@ pages += crud(60, 61, 'القوائم المرجعية', 'قيمة مرجعية'
 
 # 62/63 - Countries
 pages += crud(62, 63, 'الدول', 'دولة', 'MOINFO_COUNTRIES', 'COUNTRY_ID',
-    """select COUNTRY_ID, ISO2, NAME_AR, NAME_EN, NATIONALITY_AR, SORT_ORDER,
+    """select COUNTRY_ID, ISO2, NAME_AR, NAME_EN, NATIONALITY_AR, REGION_AR, SORT_ORDER,
        case IS_ACTIVE when 'Y' then 'نعم' else 'لا' end as IS_ACTIVE_AR
-  from MOINFO_COUNTRIES""",
+  from MOINFO_V_COUNTRIES""",
     [('COUNTRY_ID', None, 'NUMBER'), ('ISO2', 'الرمز', 'STRING'), ('NAME_AR', 'الدولة', 'STRING'),
-     ('NAME_EN', 'بالإنجليزية', 'STRING'), ('NATIONALITY_AR', 'الجنسية', 'STRING'), ('SORT_ORDER', 'الترتيب', 'NUMBER'),
-     ('IS_ACTIVE_AR', 'نشط', 'STRING')],
+     ('NAME_EN', 'بالإنجليزية', 'STRING'), ('NATIONALITY_AR', 'الجنسية', 'STRING'), ('REGION_AR', 'الإقليم', 'STRING'),
+     ('SORT_ORDER', 'الترتيب', 'NUMBER'), ('IS_ACTIVE_AR', 'نشط', 'STRING')],
     [dict(col='NAME_AR', label='الدولة بالعربية', required=True, maxlen=150),
      dict(col='NAME_EN', label='بالإنجليزية', maxlen=150),
      dict(col='NATIONALITY_AR', label='الجنسية', maxlen=150),
      dict(col='ISO2', label='رمز ISO', maxlen=2, new_line=False),
+     dict(col='REGION_ID', label='الإقليم', display='SELECT', lov='LK_WORLD_REGION', null_text='- -', dtype='NUMBER'),
      dict(col='SORT_ORDER', label='الترتيب', display='NUMBER', dtype='NUMBER'),
      dict(col='IS_ACTIVE', label='نشط', display='YESNO', default='Y', new_line=False)],
     'ADMIN')
