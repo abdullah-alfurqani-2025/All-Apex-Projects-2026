@@ -1,0 +1,331 @@
+/* =====================================================================
+   MOINFO - النظام الموحد: تنسيق التطبيق
+   مأخوذ من ألوان وخط «لوحة الدعم الفني» (tasks-dashboard-apex).
+   يُرفع كملف ثابت (Static Application File) باسم moinfo-theme.css
+   ويُضاف في User Interface Attributes ← CSS ← File URLs:
+     https://fonts.googleapis.com/earlyaccess/droidarabickufi.css
+     https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;700&display=swap
+     #APP_FILES#moinfo-theme.css
+   يعمل فوق Universal Theme بنمط Vita الافتراضي، ولا يحتاج Theme Roller.
+   ===================================================================== */
+
+/* ---------- 1) الألوان ---------- */
+:root {
+  --mi-paper: #EBF0EE;      /* خلفية الصفحة */
+  --mi-surface: #FFFFFF;    /* البطاقات والمناطق */
+  --mi-ink: #17323A;        /* النص والعناوين */
+  --mi-muted: #5C7277;      /* النص الثانوي */
+  --mi-line: #D8E1DE;       /* الحدود */
+  --mi-track: #E2E9E6;
+  --mi-hero: #17323A;       /* الشريط العلوي والأزرار الرئيسية */
+  --mi-hero-ink: #EAF3F0;
+  --mi-hero-muted: #9DB8B6;
+  --mi-green: #2E8B6A;
+  --mi-amber: #D99A2B;
+  --mi-red: #C24E46;
+  --mi-blue: #3D78B3;
+  --mi-purple: #8467B4;
+  --mi-r-lg: 22px;
+  --mi-r: 16px;
+  --mi-r-sm: 11px;
+  --mi-font: "Droid Arabic Kufi", "Noto Kufi Arabic", Tahoma, sans-serif;
+
+  /* متغيرات Universal Theme */
+  --ut-palette-primary: var(--mi-hero);
+  --ut-palette-primary-contrast: var(--mi-hero-ink);
+  --ut-palette-primary-shade: #E3ECE9;
+  --ut-palette-primary-text: var(--mi-hero);
+  --ut-palette-success: var(--mi-green);
+  --ut-palette-success-contrast: #FFFFFF;
+  --ut-palette-warning: var(--mi-amber);
+  --ut-palette-warning-contrast: #1D1A10;
+  --ut-palette-danger: var(--mi-red);
+  --ut-palette-danger-contrast: #FFFFFF;
+  --ut-palette-info: var(--mi-blue);
+  --ut-palette-info-contrast: #FFFFFF;
+  --ut-body-background-color: var(--mi-paper);
+  --ut-body-text-color: var(--mi-ink);
+  --ut-link-text-color: var(--mi-blue);
+  --ut-header-background-color: var(--mi-hero);
+  --ut-header-text-color: var(--mi-hero-ink);
+  --ut-component-background-color: var(--mi-surface);
+  --ut-component-text-color: var(--mi-ink);
+  --ut-component-border-color: var(--mi-line);
+  --ut-component-border-radius: var(--mi-r);
+  --ut-component-box-shadow: none;
+  --a-button-border-radius: var(--mi-r-sm);
+  --a-field-input-border-radius: var(--mi-r-sm);
+  --a-field-input-border-color: var(--mi-line);
+  --a-field-input-text-color: var(--mi-ink);
+  --a-field-input-focus-border-color: var(--mi-blue);
+}
+
+/* ---------- 2) الخط ---------- */
+body, .t-PageBody, .t-Body, .t-Region, .t-Form-label, .t-Button, .a-Button,
+input, select, textarea, button, .ui-dialog, .a-IRR, .a-GV, .t-Card, .t-Alert,
+.a-TreeView-label, .t-Header, .t-NavigationBar, .t-Login-region, .apex-item-text, .apex-item-select {
+  font-family: var(--mi-font);
+}
+body.t-PageBody { color: var(--mi-ink); }
+
+/* ---------- 3) الصفحة ---------- */
+body.t-PageBody,
+body .t-Body,
+body .t-Body-main,
+body .t-Body-content,
+body .t-Body-contentInner { background-color: var(--mi-paper); }
+body .t-Body-contentInner { padding-block: 20px 40px; }
+
+/* عنوان الصفحة ومسار التنقل */
+body .t-Body-title { background-color: var(--mi-paper); border-bottom: 0; box-shadow: none; }
+body .t-BreadcrumbRegion-title, body .t-Breadcrumb-label { color: var(--mi-ink); font-weight: 700; }
+body .t-Breadcrumb-item a { color: var(--mi-muted); }
+
+/* ---------- 4) الشريط العلوي ---------- */
+body .t-Header,
+body .t-Header-branding { background-color: var(--mi-hero); color: var(--mi-hero-ink); box-shadow: none; border-bottom: 0; }
+body .t-Header-logo, body .t-Header-logo-link, body .t-Header-logo-link span { color: var(--mi-hero-ink); font-weight: 700; }
+body .t-Header .t-Button--header,
+body .t-NavigationBar .t-Button--header,
+body .t-Header-controls .t-Button { color: var(--mi-hero-ink); background-color: transparent; }
+body .t-Header .t-Button--header:hover,
+body .t-Header .t-Button--header:focus { background-color: rgba(255, 255, 255, .10); }
+body .t-NavigationBar-item .t-Icon, body .t-Header .fa { color: var(--mi-hero-ink); }
+
+/* ---------- 5) القائمة الجانبية ---------- */
+body .t-Body-nav,
+body .t-TreeNav,
+body .t-TreeNav .a-TreeView { background-color: var(--mi-surface); }
+body .t-Body-nav { border-inline-end: 1px solid var(--mi-line); box-shadow: none; }
+body .t-TreeNav .a-TreeView-node--topLevel > .a-TreeView-content,
+body .t-TreeNav .a-TreeView-content { color: var(--mi-ink); background-color: transparent; border-radius: var(--mi-r-sm); }
+body .t-TreeNav .a-TreeView-label { color: inherit; font-size: 13.5px; }
+body .t-TreeNav .a-TreeView-content .fa,
+body .t-TreeNav .a-TreeView-content .a-Icon { color: var(--mi-muted); }
+body .t-TreeNav .a-TreeView-content.is-hover,
+body .t-TreeNav .a-TreeView-content:hover { background-color: var(--mi-paper); color: var(--mi-ink); }
+body .t-TreeNav .a-TreeView-node--topLevel.is-current--top > .a-TreeView-content,
+body .t-TreeNav .a-TreeView-content.is-current,
+body .t-TreeNav .a-TreeView-content.is-current--top { background-color: var(--mi-hero); color: var(--mi-hero-ink); }
+body .t-TreeNav .a-TreeView-content.is-current .fa,
+body .t-TreeNav .a-TreeView-content.is-current--top .fa,
+body .t-TreeNav .is-current--top > .a-TreeView-content .fa { color: var(--mi-hero-ink); }
+body .t-TreeNav .a-TreeView-row { background: transparent; }
+body .t-TreeNav .a-TreeView-node .a-TreeView-node .a-TreeView-content { font-size: 13px; }
+
+/* ---------- 6) المناطق (البطاقات) ---------- */
+body .t-Region,
+body .t-IRR-region,
+body .t-Form--region {
+  background-color: var(--mi-surface);
+  border: 1px solid var(--mi-line);
+  border-radius: var(--mi-r);
+  box-shadow: none;
+  overflow: hidden;
+}
+body .t-Region-header { background-color: var(--mi-surface); border-bottom: 1px solid var(--mi-line); color: var(--mi-ink); }
+body .t-Region-title { font-size: 16px; font-weight: 700; color: var(--mi-ink); }
+body .t-Region-body { color: var(--mi-ink); }
+body .t-Region--noBorder,
+body .t-Region--noBorder > .t-Region-header { border: 0; background: transparent; }
+body .t-Region--removeHeader > .t-Region-header, body .t-Region--hideHeader > .t-Region-header { border: 0; }
+body .t-Region .t-Region { border-radius: 12px; }   /* منطقة داخل منطقة */
+body .t-Region-buttons { border-top-color: var(--mi-line); }
+
+/* ---------- 7) منطقة الترحيب (Hero) في الصفحة الرئيسية ---------- */
+body .t-HeroRegion {
+  background-color: var(--mi-hero);
+  color: var(--mi-hero-ink);
+  border-radius: var(--mi-r-lg);
+  border: 0;
+  padding: 28px;
+  margin-bottom: 18px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+body .t-HeroRegion::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(520px circle at 85% 0%, rgba(255, 255, 255, .08), transparent 62%);
+}
+body .t-HeroRegion-title { color: var(--mi-hero-ink); font-weight: 700; font-size: clamp(22px, 3vw, 32px); line-height: 1.5; }
+body .t-HeroRegion-body, body .t-HeroRegion-body p { color: var(--mi-hero-muted); font-size: 14px; }
+body .t-HeroRegion-icon { background-color: rgba(255, 255, 255, .10); color: var(--mi-hero-ink); border-radius: 14px; }
+
+/* ---------- 8) بطاقات الوحدات في الصفحة الرئيسية ---------- */
+body .t-Cards .t-Card {
+  background-color: var(--mi-surface);
+  border: 1px solid var(--mi-line);
+  border-radius: var(--mi-r);
+  box-shadow: none;
+  overflow: hidden;
+  transition: transform .2s cubic-bezier(.2, .8, .2, 1), border-color .2s ease;
+}
+body .t-Cards .t-Card:hover { transform: translateY(-2px); border-color: var(--mi-c, var(--mi-hero)); box-shadow: 0 12px 28px -18px rgba(10, 30, 35, .45); }
+body .t-Cards .t-Card-wrap { border: 0; border-radius: var(--mi-r); background: transparent; }
+body .t-Cards .t-Card-title { color: var(--mi-ink); font-weight: 700; font-size: 15px; }
+body .t-Cards .t-Card-desc { color: var(--mi-muted); font-size: 12.5px; line-height: 1.7; }
+body .t-Cards .t-Card-icon {
+  background-color: color-mix(in srgb, var(--mi-c, var(--mi-hero)) 14%, transparent) !important;
+  color: var(--mi-c, var(--mi-hero)) !important;
+  border-radius: 14px;
+}
+body .t-Cards .t-Card-icon .t-Icon, body .t-Cards .t-Card-icon .fa { color: var(--mi-c, var(--mi-hero)) !important; }
+body .t-Cards .t-Card-colorFill { background-color: color-mix(in srgb, var(--mi-c, var(--mi-hero)) 6%, transparent) !important; }
+/* لون لكل بطاقة بالتناوب من ألوان اللوحة */
+body .t-Cards > li:nth-child(6n+1) { --mi-c: var(--mi-hero); }
+body .t-Cards > li:nth-child(6n+2) { --mi-c: var(--mi-green); }
+body .t-Cards > li:nth-child(6n+3) { --mi-c: var(--mi-blue); }
+body .t-Cards > li:nth-child(6n+4) { --mi-c: var(--mi-amber); }
+body .t-Cards > li:nth-child(6n+5) { --mi-c: var(--mi-purple); }
+body .t-Cards > li:nth-child(6n+6) { --mi-c: var(--mi-red); }
+
+/* ---------- 9) الأزرار ---------- */
+body .t-Button:not(.t-Button--header):not(.t-Button--link):not(.t-Button--noUI),
+body .a-Button:not(.a-Button--noUI) {
+  border-radius: var(--mi-r-sm);
+  box-shadow: none;
+  border: 1px solid var(--mi-line);
+  background-color: var(--mi-surface);
+  color: var(--mi-ink);
+  transition: filter .15s ease, background-color .2s ease, transform .15s ease;
+}
+body .t-Button:not(.t-Button--header):not(.t-Button--link):not(.t-Button--noUI):hover,
+body .a-Button:not(.a-Button--noUI):hover { background-color: var(--mi-paper); }
+body .t-Button:active, body .a-Button:active { transform: scale(.97); }
+body .t-Button.t-Button--hot,
+body .a-Button.a-Button--hot,
+body .ui-dialog .ui-button.ui-button--hot {
+  background-color: var(--mi-hero);
+  border-color: var(--mi-hero);
+  color: var(--mi-hero-ink);
+  font-weight: 700;
+}
+body .t-Button.t-Button--hot:hover, body .a-Button.a-Button--hot:hover { background-color: var(--mi-hero); filter: brightness(1.15); }
+body .t-Button.t-Button--danger { background-color: var(--mi-surface); color: var(--mi-red); border-color: color-mix(in srgb, var(--mi-red) 45%, var(--mi-line)); }
+body .t-Button.t-Button--danger:hover { background-color: var(--mi-red); color: #FFFFFF; }
+body .t-Button.t-Button--success { background-color: var(--mi-green); border-color: var(--mi-green); color: #FFFFFF; }
+body .t-Button.t-Button--warning { background-color: var(--mi-amber); border-color: var(--mi-amber); color: #1D1A10; }
+body .t-Button--link, body .t-Body-contentInner a:not([class]) { color: var(--mi-blue); }
+body .t-Button .t-Icon, body .t-Button .fa { color: inherit; }
+
+/* ---------- 10) حقول الإدخال ---------- */
+body .apex-item-text,
+body .apex-item-textarea,
+body .apex-item-select,
+body .apex-item-datepicker,
+body .apex-item-popup-lov,
+body .a-IRR-search-field,
+body select.selectlist,
+body .t-Form-inputContainer input[type="text"],
+body .t-Form-inputContainer input[type="password"],
+body .t-Form-inputContainer input[type="number"] {
+  border-color: var(--mi-line);
+  border-radius: var(--mi-r-sm);
+  color: var(--mi-ink);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+body .apex-item-text:focus,
+body .apex-item-textarea:focus,
+body .apex-item-select:focus,
+body .apex-item-datepicker:focus,
+body .apex-item-popup-lov:focus,
+body .a-IRR-search-field:focus,
+body .t-Form-inputContainer input:focus,
+body .t-Form-inputContainer select:focus,
+body .t-Form-inputContainer textarea:focus {
+  border-color: var(--mi-blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mi-blue) 22%, transparent);
+  outline: none;
+}
+body .t-Form-label { color: var(--mi-muted); }
+body .t-Form-fieldContainer--floatingLabel.is-active .t-Form-label { color: var(--mi-blue); }
+body .t-Form-error, body .a-Form-error { color: var(--mi-red); }
+body .t-Form-inlineHelp, body .t-Form-helpText { color: var(--mi-muted); }
+body .apex-item-checkbox input, body .apex-item-radio input,
+body input[type="checkbox"], body input[type="radio"] { accent-color: var(--mi-green); }
+body .apex-item-display-only, body .display_only { color: var(--mi-ink); }
+
+/* ---------- 11) التقارير التفاعلية (Interactive Report) ---------- */
+body .a-IRR { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+body .a-IRR-toolbar { background-color: var(--mi-surface); border-bottom: 1px solid var(--mi-line); padding: 10px 12px; }
+body .a-IRR-table th,
+body .a-IRR-table th.a-IRR-header,
+body .a-IRR-header { background-color: var(--mi-paper); color: var(--mi-muted); font-weight: 700; font-size: 12.5px; border-color: var(--mi-line); }
+body .a-IRR-headerLink, body .a-IRR-headerLabel { color: var(--mi-muted); }
+body .a-IRR-table td { border-color: var(--mi-line); color: var(--mi-ink); font-size: 13.5px; }
+body .a-IRR-table tr:hover td { background-color: color-mix(in srgb, var(--mi-hero) 4%, var(--mi-surface)); }
+body .a-IRR-table a { color: var(--mi-blue); }
+body .a-IRR-table td .fa-edit, body .a-IRR-table td .fa-pencil { color: var(--mi-muted); }
+body .a-IRR-table tr:hover td .fa-edit, body .a-IRR-table tr:hover td .fa-pencil { color: var(--mi-hero); }
+body .a-IRR-paginationWrap, body .a-IRR-pagination { background: var(--mi-surface); border-color: var(--mi-line); color: var(--mi-muted); }
+body .a-IRR-controls { background: var(--mi-surface); border-color: var(--mi-line); }
+body .a-IRR-controlsLabel, body .a-IRR-controlsCheckboxLabel { color: var(--mi-muted); }
+body .a-IRR-button, body .a-IRR-buttons .a-Button { border-radius: var(--mi-r-sm); }
+body .a-IRR-noDataMsg { color: var(--mi-muted); }
+
+/* التقارير الكلاسيكية والقوائم القيمية */
+body .t-Report-report th, body .t-Report-colHead { background-color: var(--mi-paper); color: var(--mi-muted); border-color: var(--mi-line); }
+body .t-Report-report td, body .t-Report-cell { border-color: var(--mi-line); color: var(--mi-ink); }
+body .t-Report--rowHighlight .t-Report-report tr:hover .t-Report-cell { background-color: color-mix(in srgb, var(--mi-hero) 4%, var(--mi-surface)); }
+
+/* ---------- 12) الرسائل والتنبيهات ---------- */
+body .t-Alert { border-radius: 14px; box-shadow: none; border: 1px solid var(--mi-line); }
+body .t-Alert--success .t-Alert-icon, body .t-Alert--success .t-Icon { color: var(--mi-green); }
+body .t-Alert--warning .t-Alert-icon, body .t-Alert--warning .t-Icon { color: var(--mi-amber); }
+body .t-Alert--danger .t-Alert-icon, body .t-Alert--danger .t-Icon { color: var(--mi-red); }
+body .t-Alert--info .t-Alert-icon, body .t-Alert--info .t-Icon { color: var(--mi-blue); }
+body .t-Body-alert .t-Alert--page.t-Alert--success { background-color: var(--mi-hero); color: var(--mi-hero-ink); border: 0; box-shadow: 0 14px 30px -10px rgba(0, 0, 0, .35); }
+body .t-Body-alert .t-Alert--page.t-Alert--success .t-Alert-title,
+body .t-Body-alert .t-Alert--page.t-Alert--success .t-Icon { color: var(--mi-hero-ink); }
+body .t-Body-alert .t-Alert--page.t-Alert--warning,
+body .t-Body-alert .t-Alert--page.t-Alert--danger { border-inline-start: 4px solid var(--mi-red); }
+
+/* ---------- 13) النوافذ المنبثقة ---------- */
+body .ui-dialog { border: 1px solid var(--mi-line); border-radius: 20px; overflow: hidden; box-shadow: 0 40px 80px -30px rgba(10, 25, 30, .5); }
+body .ui-dialog .ui-dialog-titlebar { background-color: var(--mi-surface); border-bottom: 1px solid var(--mi-line); color: var(--mi-ink); }
+body .ui-dialog .ui-dialog-title { font-weight: 700; color: var(--mi-ink); }
+body .ui-widget-overlay { background: rgba(10, 22, 26, .45); backdrop-filter: blur(2px); opacity: 1; }
+body.t-Dialog-page, body .t-Dialog-body, body .t-Dialog-page .t-Body-contentInner { background-color: var(--mi-surface); }
+body .t-Dialog-page .t-Region { border-radius: 12px; }
+body .t-ButtonRegion, body .t-ButtonRegion--dialogRegion { background-color: var(--mi-surface); border-top: 1px solid var(--mi-line); }
+
+/* ---------- 14) صفحة الدخول ---------- */
+body.t-PageBody--login,
+body.t-PageBody--login .t-Body,
+body.t-PageBody--login .t-Body-content { background-color: var(--mi-paper); }
+body.t-PageBody--login .t-Login-region,
+body .t-Login-region {
+  background-color: var(--mi-surface);
+  border: 1px solid var(--mi-line);
+  border-radius: 20px;
+  box-shadow: 0 30px 60px -36px rgba(10, 30, 35, .45);
+  overflow: hidden;
+}
+body .t-Login-header { background-color: var(--mi-hero); color: var(--mi-hero-ink); padding-block: 28px 22px; }
+body .t-Login-title, body .t-Login-header .t-Login-title { color: var(--mi-hero-ink); font-weight: 700; }
+body .t-Login-logo { background-color: rgba(255, 255, 255, .10); color: var(--mi-hero-ink); border-radius: 16px; }
+body .t-Login-buttons .t-Button--hot, body .t-Login-region .t-Button--hot { width: 100%; padding-block: 11px; font-size: 14.5px; }
+
+/* ---------- 15) عناصر متفرقة ---------- */
+body .t-Badge, body .t-BadgeList .t-BadgeList-value { border-radius: 99px; }
+body .t-Footer { color: var(--mi-muted); font-size: 12px; }
+body .t-Footer a { color: var(--mi-muted); }
+body .a-Tabs, body .t-Tabs { border-color: var(--mi-line); }
+body .t-Tabs-link { color: var(--mi-muted); }
+body .t-Tabs-item.is-active .t-Tabs-link { color: var(--mi-ink); font-weight: 700; }
+body ::selection { background: color-mix(in srgb, var(--mi-blue) 25%, transparent); }
+
+/* أشكال الحالات في التقارير: <span class="mi-chip mi-green">...</span> */
+.mi-chip { display: inline-block; font-size: 12px; line-height: 1.6; padding: 1px 10px; border-radius: 99px;
+  color: var(--mi-c, var(--mi-hero)); background: color-mix(in srgb, var(--mi-c, var(--mi-hero)) 14%, transparent); white-space: nowrap; }
+.mi-green { --mi-c: var(--mi-green); } .mi-amber { --mi-c: var(--mi-amber); } .mi-red { --mi-c: var(--mi-red); }
+.mi-blue { --mi-c: var(--mi-blue); } .mi-purple { --mi-c: var(--mi-purple); } .mi-gray { --mi-c: var(--mi-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  body .t-Cards .t-Card, body .t-Button, body .a-Button { transition: none; }
+}
+@media (max-width: 640px) {
+  body .t-HeroRegion { padding: 22px 18px; border-radius: 18px; }
+  body .t-Region { border-radius: 14px; }
+}

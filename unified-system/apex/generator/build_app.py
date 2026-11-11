@@ -5,6 +5,26 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gen_app import *
 import modules
 
+# App-wide look (colours and font of the Tasks Dashboard): static file + CSS URLs
+CSS_URLS = ("https://fonts.googleapis.com/earlyaccess/droidarabickufi.css\n"
+            "https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;700&display=swap\n"
+            "#APP_FILES#moinfo-theme.css")
+
+def static_file_block(file_id, name, mime, content, prompt_name):
+    hexs = content.hex().upper()
+    chunks = [hexs[i:i + 200] for i in range(0, len(hexs), 200)]
+    out = [f"prompt --application/shared_components/files/{prompt_name}", "begin",
+           "wwv_flow_imp.g_varchar2_table := wwv_flow_imp.empty_varchar2_table;"]
+    out += [f"wwv_flow_imp.g_varchar2_table({i + 1}) := '{c}';" for i, c in enumerate(chunks)]
+    out += ["wwv_flow_imp_shared.create_app_static_file(",
+            f" p_id=>wwv_flow_imp.id({file_id})",
+            f",p_file_name=>{lit(name)}",
+            f",p_mime_type=>{lit(mime)}",
+            ",p_file_charset=>'utf-8'",
+            ",p_file_content=>wwv_flow_imp.varchar2_to_blob(wwv_flow_imp.g_varchar2_table)",
+            ");", "end;", "/"]
+    return "\n".join(out) + "\n"
+
 OUT = sys.argv[1] if len(sys.argv) > 1 else 'f145032.sql'
 
 def rd(name):
@@ -97,6 +117,7 @@ wwv_imp_workspace.create_flow(
 ,p_navigation_list_position=>'SIDE'
 ,p_navigation_list_template_id=>{T_LIST_SIDE_NAV}
 ,p_nav_list_template_options=>'#DEFAULT#:t-TreeNav--styleA:js-navCollapsed--hidden'
+,p_css_file_urls=>{lines(CSS_URLS)}
 ,p_nav_bar_type=>'LIST'
 ,p_nav_bar_list_id=>{rid(NAV_BAR)}
 ,p_nav_bar_list_template_id=>{T_LIST_NAVBAR}
@@ -177,6 +198,9 @@ parts.append(list_component('Home Admin Cards', home_items, 'home_admin_cards'))
 # 4) Files, LOVs, groups, theme, build options, authentication
 # ------------------------------------------------------------------------------
 parts.append(rd('app_files.sql'))
+parts.append(static_file_block(930000000000099001, 'moinfo-theme.css', 'text/css',
+                                open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'moinfo-theme.css'), 'rb').read(),
+                                'moinfo_theme_css'))
 parts.append(rd('lov_boolean.sql'))
 parts.append(lov('MODULES', "select MODULE_NAME_AR d, MODULE_CODE r from MOINFO_MODULES where IS_ACTIVE = 'Y' order by SORT_ORDER"))
 parts.append(lov('ROLES', """select r.ROLE_NAME_AR || nvl2(m.MODULE_NAME_AR, ' (' || m.MODULE_NAME_AR || ')', '') d, r.ROLE_ID r
